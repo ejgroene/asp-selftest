@@ -40,7 +40,7 @@ class Tester:
         self._models_ist = 0
         self._models_soll = -1
 
-    def name(self, name):
+    def all(self, name):
         """ ASP API: add a named assert to be checked for each model """
         self._asserts.add(clingo.Function("assert", [name]))
         return name
@@ -48,7 +48,7 @@ class Tester:
     def models(self, n):
         """ ASP API: add assert for the total number of models """
         self._models_soll = n.number
-        return self.name(clingo.Function("models", [n]))
+        return self.all(clingo.Function("models", [n]))
 
     def on_model(self, model):
         """ Callback when model is found; count model and check all asserts. """
