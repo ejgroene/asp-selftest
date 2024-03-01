@@ -27,11 +27,25 @@ IDEA
        { fix(A) : A=1..N } = 1 :- n(N).
        
        #program testpart(part).
+       n(10).
        assert(@all(select_one)) :- { fix(X) : X=1..10 } = 1.
 
 4. To enable testing constraints and to guard tests for empty model sets, we use `@models` to check for the expected number of models. In the example above, we would add:
 
-    assert(@models(10)).
+       assert(@models(10)).
+
+5. An interesting use case came up while testing uniqueness of terms. Suppose we want to guard against defining and input twice based on the fact that the first parameter of the function `input` is actually an unique identifier. We have to include this identifier in the assert, since we want it asserted for every possible identifier. So the assert becomes: `assert@all(input_is(Uniq)))`, with `Uniq`  being the identifier:
+
+       #program define_inputs().
+       input(input_a, 1, position(4), "Input A").       % full definition
+       input(input_b, 2, position(3), "Input B").       % full definition
+       input(Id)  :-  input(Id, _, _, _).               % shortcut for easier testing
+
+       #program test_inputs(define_inputs).
+       assert(@models(1)).
+       assert(@all(input_is(Uniq)))  :-  input(Uniq),  { input(Uniq, _, _, _) } = 1.
+
+   Note that if we would just write `assert(@all(input_is_unique))`, the test would succeed as long as if there is al least one input not defined twice, leaving all others untested. It turned out that the software could already do this. Only the name of the argument in Python changed from `name` to `term`.
 
 TESTING
 -------

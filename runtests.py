@@ -1,14 +1,16 @@
+#!/usr/bin/env python3.11
 import clingo
 import sys
 import ast
 
-def parse(o):
-    return o.value if isinstance(o, ast.Constant) else \
-           (o.id, []) if isinstance(o, ast.Name) else \
-           (o.func.id, [parse(a) for a in o.args])
+from clingo.script import enable_python
+enable_python()
 
 def parse_signature(s):
     # parse extended #program syntax using Python's parser
+    parse = lambda o: o.value if isinstance(o, ast.Constant) else \
+                      (o.id, []) if isinstance(o, ast.Name) else \
+                      (o.func.id, [parse(a) for a in o.args])
     return parse(ast.parse(s).body[0].value)
 
 p = parse_signature("one(two, three)")
@@ -23,6 +25,7 @@ program_file = sys.argv[1]
 # read all the #program parts and register their dependencies
 lines = open(program_file).readlines()
 programs = {}
+
 for i, line in enumerate(lines):
     if line.startswith('#program'):
         name, deps = parse_signature(line.split('#program')[1].strip()[:-1])
@@ -40,10 +43,10 @@ class Tester:
         self._models_ist = 0
         self._models_soll = -1
 
-    def all(self, name):
+    def all(self, term):
         """ ASP API: add a named assert to be checked for each model """
-        self._asserts.add(clingo.Function("assert", [name]))
-        return name
+        self._asserts.add(clingo.Function("assert", [term]))
+        return term
 
     def models(self, n):
         """ ASP API: add assert for the total number of models """
@@ -63,17 +66,20 @@ class Tester:
         print(f" {len(self._asserts)} asserts,  {self._models_ist} models.  OK")
 
 
+    def concat(self, *args):
+        return clingo.String(''.join(a.string for a in args))
+
+
+#sys.tracebacklimit = 0
+
 for name, deps in programs.items():
-    sys.tracebacklimit = 0
     control = clingo.Control(['0'])
     control.add('\n'.join(lines))
     if name.startswith('test'):
         print(name, end=', ', flush=True)
         tester = Tester()
-        control.ground(
-            [(name, [clingo.Number(1) for _ in deps])] +
-            [(depname, [clingo.parse_term(str(a)) for a in depargs]) for depname, depargs in deps],
-            context = tester
-        )
-        control.solve(on_model=tester.on_model)
+        programs = [(name, [clingo.Number(1) for _ in deps])] + \
+                   [(depname, [clingo.parse_term(str(a)) for a in depargs]) for depname, depargs in deps]
+        control.ground(programs, context = tester)
+        control.solve(on_model = tester.on_model)
         tester.report()
