@@ -1,6 +1,8 @@
 # asp-selftest
 In-source STTCPW test runner for Answer Set Programming (ASP) with Clingo.
 
+It is rough and unpolished, but it works.
+
 GOAL
 ----
 
