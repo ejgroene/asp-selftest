@@ -54,10 +54,7 @@ TESTING
 
 Tests are run using the testrunner:
 
-    $ python runtests.py example.lp
+    $ python asp-tests example.lp
     teststep,  2 asserts,  10 models.  OK
 
-To use the program without the tests use (NYI):
-
-    $ python runtests.py --main example.lp <more files>
-
+To use the program without the tests: Not Yet Implemented. But you can use the `base` program anywhere of course, since all `#program`s are ignored by default.
