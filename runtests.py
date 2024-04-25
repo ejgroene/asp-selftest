@@ -24,6 +24,7 @@ program_file = sys.argv[1]
 
 # read all the #program parts and register their dependencies
 lines = open(program_file).readlines()
+print(f"Read {len(lines)} lines.")
 programs = {}
 
 for i, line in enumerate(lines):
@@ -46,6 +47,7 @@ class Tester:
     def all(self, term):
         """ ASP API: add a named assert to be checked for each model """
         self._asserts.add(clingo.Function("assert", [term]))
+        #print("ALL:", term)
         return term
 
     def models(self, n):
@@ -70,11 +72,12 @@ class Tester:
         return clingo.String(''.join(a.string for a in args))
 
 
-#sys.tracebacklimit = 0
+sys.tracebacklimit = 0
+
+control = clingo.Control(['0'])
+control.add('\n'.join(lines))
 
 for name, deps in programs.items():
-    control = clingo.Control(['0'])
-    control.add('\n'.join(lines))
     if name.startswith('test'):
         print(name, end=', ', flush=True)
         tester = Tester()
