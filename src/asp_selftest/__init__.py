@@ -1,2 +1,2 @@
 
-from .runasptests import runasptests
+from .runasptests import runasptests, register

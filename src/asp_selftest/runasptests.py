@@ -20,6 +20,13 @@ assert p == ('one', [2, 3]), p
 p = parse_signature("one(two(2, aap), three(42))")
 assert p == ('one', [('two', [2, ('aap', [])]), ('three', [42])]), p
 
+
+current_tester = None
+def register(func):
+    global current_tester
+    current_tester.add_function(func)
+
+
 def runasptests():
     program_file = sys.argv[1]
 
@@ -44,6 +51,7 @@ def runasptests():
             self._asserts = set()
             self._models_ist = 0
             self._models_soll = -1
+            self._funcs = {}
 
         def all(self, term):
             """ ASP API: add a named assert to be checked for each model """
@@ -69,25 +77,29 @@ def runasptests():
             print(f" {len(self._asserts)} asserts,  {self._models_ist} models.  OK")
 
 
-        def concat(self, *args):
-            return clingo.String(''.join(a.string for a in args))
+        def add_function(self, func):
+            self._funcs[func.__name__] = func
+
+
+        def __getattr__(self, name):
+            return self._funcs[name]
 
 
     sys.tracebacklimit = 0
 
-    control = clingo.Control(['0'])
-    control.add('\n'.join(lines))
-
     for name, deps in programs.items():
         if name.startswith('test'):
+            global current_tester
+            tester = current_tester = Tester()
+            control = clingo.Control(['0'])
+            control.add('\n'.join(lines))
+
             print(name, end=', ', flush=True)
-            tester = Tester()
             programs = [(name, [clingo.Number(1) for _ in deps])] + \
                        [(depname, [clingo.parse_term(str(a)) for a in depargs]) for depname, depargs in deps]
             control.ground(programs, context = tester)
             control.solve(on_model = tester.on_model)
             tester.report()
-
 
 
 if __name__ == '__main__':
