@@ -1,3 +1,4 @@
 clingo >= 5.7.1
 selftest >= 0.4.0
 build
+twine
