@@ -48,10 +48,36 @@ def parse_some_signatures():
 current_tester = None
 
 def register(func):
-    assert inspect.isfunction(func), f"{func} must be a function"
+    assert inspect.isfunction(func), f"{func!r} must be a function"
     global current_tester
     if current_tester:    # we might not run, actually...
         current_tester.add_function(func)
+
+
+
+@test
+def register_asp_function():
+    global current_tester
+    def f(a):
+        pass
+    test.eq(None, current_tester)
+    register(f)
+    test.eq(None, current_tester)
+    fs = []
+    class X:
+        def add_function(self, f):
+            fs.append(f)
+    try:
+        current_tester = X()
+        register(f)
+        test.eq(f, fs[0])
+    finally:
+        current_tester = None
+
+
+@test
+def register_asp_function_is_function(raises:(AssertionError, "'aap' must be a function")):
+    register("aap")
 
 
 class Tester:
@@ -96,26 +122,31 @@ class Tester:
 def do_tests(asp_code):
     lines = asp_code.splitlines()
     # read all the #program parts and register their dependencies
-    programs = {}
+    programs = {'base': []}
     for i, line in enumerate(lines):
         if line.strip().startswith('#program'):
             name, deps = parse_signature(line.split('#program')[1].strip()[:-1])
             if name in programs:
                 raise Exception("Duplicate test name: " + name)
             programs[name] = deps
+            print("Found:", name, deps)
             # rewrite into valid ASP (turn functions into plain terms)
             lines[i] = f"#program {name}({','.join(dep[0] for dep in deps)})."
 
-    for name, deps in programs.items():
+    for name in programs:
         if name.startswith('test'):
             global current_tester
             tester = current_tester = Tester()
             control = clingo.Control(['0'])
             control.add('\n'.join(lines))
 
-            programs = [(name, [clingo.Number(1) for _ in deps])] + \
-                       [(depname, [clingo.parse_term(str(a)) for a in depargs]) for depname, depargs in deps]
-            control.ground(programs, context = tester)
+            def prog_with_args(name):
+                deps = programs[name]
+                yield name, [clingo.Number(1) for _ in deps]
+                for n, d in deps:
+                    yield from prog_with_args(n)
+            to_ground = list(prog_with_args(name))
+            control.ground(to_ground, context = tester)
             control.solve(on_model = tester.on_model)
             yield name, tester.report()
 
@@ -148,3 +179,23 @@ def simple_program():
     test.eq(('test_fact', {'asserts': {'assert("facts")', 'assert(models(1))'}, 'models': 1}), next(t))
 
 
+@test
+def dependencies():
+    t = do_tests("""
+        base_fact.
+
+        #program one(base).
+        one_fact.
+
+        #program test_base(base).
+        assert(@all("base_facts")) :- base_fact.
+        assert(@models(1)).
+
+        #program test_one(one).
+        assert(@all("one includes base")) :- base_fact, one_fact.
+        assert(@models(1)).
+     """)
+    test.eq(('test_base', {'asserts': {'assert("base_facts")'       , 'assert(models(1))'}, 'models': 1}), next(t))
+    test.eq(('test_one' , {'asserts': {'assert("one includes base")', 'assert(models(1))'}, 'models': 1}), next(t))
+
+# more tests in __init__ to avoid circular imports
