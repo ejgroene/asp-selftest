@@ -119,7 +119,7 @@ class Tester:
         return self._funcs[name]
 
 
-def do_tests(asp_code):
+def read_programs(asp_code):
     lines = asp_code.splitlines()
     # read all the #program parts and register their dependencies
     programs = {'base': []}
@@ -132,6 +132,39 @@ def do_tests(asp_code):
             print("Found:", name, deps)
             # rewrite into valid ASP (turn functions into plain terms)
             lines[i] = f"#program {name}({','.join(dep[0] for dep in deps)})."
+    return lines, programs
+
+
+@test
+def read_no_programs():
+    lines, programs = read_programs(""" fact. """)
+    test.eq([" fact. "], lines)
+    test.eq({'base': []}, programs)
+
+
+@test
+def read_no_args():
+    lines, programs = read_programs(""" fact. \n#program a.""")
+    test.eq([" fact. ", "#program a()."], lines)
+    test.eq({'base': [], 'a': []}, programs)
+
+
+@test
+def read_one_arg():
+    lines, programs = read_programs(""" fact. \n#program a. \n #program b(a). """)
+    test.eq([" fact. ", "#program a().", "#program b(a)."], lines)
+    test.eq({'base': [], 'a': [], 'b': [('a', [])]}, programs)
+
+
+@test
+def read_function_args():
+    lines, programs = read_programs(""" fact. \n#program a(x). \n #program b(a(42)). """)
+    test.eq([" fact. ", "#program a(x).", "#program b(a)."], lines)  # 42 removed
+    test.eq({'base': [], 'a': [('x', [])], 'b': [('a', [42])]}, programs)
+
+
+def do_tests(asp_code):
+    lines, programs = read_programs(asp_code)
 
     for name in programs:
         if name.startswith('test'):
