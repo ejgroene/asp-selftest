@@ -8,8 +8,8 @@ from .runasptests import runasptests, register
 @test
 def program_with_python():
     """ test import of 'register'; here because runasptests modules must ve finished importing """
-    from .runasptests import do_tests
-    t = do_tests("""
+    from .runasptests import parse_and_run_tests
+    t = parse_and_run_tests("""
 #script (python)
 import clingo
 import asp_selftest

@@ -41,16 +41,16 @@ def parse_some_signatures():
     test.eq(('one', [('two', [2, ('aap', [])]), ('three', [42])]), parse_signature("one(two(2, aap), three(42))"))
 
 
-""" Selftest uses the context for supplying the functions @all and @models to the ASP program. 
-    As a result the ASP program own Python functions are ignored. To reenable these, they must
-    be registered using register(func).
-"""
 current_tester = None
 
 def register(func):
+    """ Selftest uses the context for supplying the functions @all and @models to the ASP program. 
+        As a result the ASP program own Python functions are ignored. To reenable these, they must
+        be registered using register(func).
+    """
     assert inspect.isfunction(func), f"{func!r} must be a function"
     global current_tester
-    if current_tester:    # we might not run, actually...
+    if current_tester:
         current_tester.add_function(func)
 
 
@@ -88,15 +88,18 @@ class Tester:
         self._models_soll = -1
         self._funcs = {}
 
+
     def all(self, *args):
         """ ASP API: add a named assert to be checked for each model """
         self._asserts.add(clingo.Function("assert", args))
         return args
 
+
     def models(self, n):
         """ ASP API: add assert for the total number of models """
         self._models_soll = n.number
         return self.all(clingo.Function("models", [n]))
+
 
     def on_model(self, model):
         """ Callback when model is found; count model and check all asserts. """
@@ -104,6 +107,7 @@ class Tester:
         failures = [a for a in self._asserts if not model.contains(a)]
         assert not failures, f"FAILED: {', '.join(map(str, failures))}\nMODEL: {model}"
         return model
+
 
     def report(self):
         """ When done, check assert(@models(n)) explicitly, then report. """
@@ -120,16 +124,15 @@ class Tester:
 
 
 def read_programs(asp_code):
+    """ read all the #program parts and register their dependencies """
     lines = asp_code.splitlines()
-    # read all the #program parts and register their dependencies
     programs = {'base': []}
     for i, line in enumerate(lines):
         if line.strip().startswith('#program'):
             name, deps = parse_signature(line.split('#program')[1].strip()[:-1])
             if name in programs:
-                raise Exception("Duplicate test name: " + name)
+                raise Exception(f"Duplicate test name: {name!r}")
             programs[name] = deps
-            print("Found:", name, deps)
             # rewrite into valid ASP (turn functions into plain terms)
             lines[i] = f"#program {name}({','.join(dep[0] for dep in deps)})."
     return lines, programs
@@ -163,9 +166,13 @@ def read_function_args():
     test.eq({'base': [], 'a': [('x', [])], 'b': [('a', [42])]}, programs)
 
 
-def do_tests(asp_code):
-    lines, programs = read_programs(asp_code)
+@test
+def check_for_duplicate_test(raises:(Exception, "Duplicate test name: 'test_a'")):
+    read_programs(""" #program test_a. \n #program test_a. """)
 
+
+
+def do_tests(lines, programs):
     for name in programs:
         if name.startswith('test'):
             global current_tester
@@ -185,11 +192,16 @@ def do_tests(asp_code):
 
 
 
+def parse_and_run_tests(asp_code):
+    lines, programs = read_programs(asp_code)
+    return do_tests(lines, programs)
+
+
 def runasptests():
     for program_file in sys.argv[1:]:
         print(f"Reading {program_file}.", flush=True)
-        lines = open(program_file).read()
-        for name, result in do_tests(lines):
+        asp_code = open(program_file).read()
+        for name, result in parse_and_run_tests(asp_code):
             asserts = result['asserts']
             models = result['models']
             print(f"ASPUNIT: {name}: ", end='', flush=True)
@@ -203,7 +215,7 @@ if __name__ == '__main__':
 
 @test
 def simple_program():
-    t = do_tests("""
+    t = parse_and_run_tests("""
         fact.
         #program test_fact(base).
         assert(@all("facts")) :- fact.
@@ -214,7 +226,7 @@ def simple_program():
 
 @test
 def dependencies():
-    t = do_tests("""
+    t = parse_and_run_tests("""
         base_fact.
 
         #program one(base).
