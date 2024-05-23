@@ -1,4 +1,34 @@
 #!/usr/bin/env python3
+
+""" Runs all tests in an ASP program.
+
+A test in ASP consists of a #program directive beginning with 'test'.
+The constants normally used as arguments are taken for the names of
+other programs that the test depends upon or wants to test. I.e.:
+
+    #program one.
+    one_fact.
+
+    #program setup.
+    ...
+
+    #program test_one(setup, one).
+    ...
+
+Asserts are done with @all and @models, embedded in an atom 'assert':
+    assert(@all("one-must-hold"))  :-  one_fact.
+    assert(@models(1)).
+
+They jointly express that 'assert("one-must-hold")' must be true in 
+all the expected models (exactly 1).
+
+"one-must-hold" can be any atom and generally must contain variables
+only when the rule expands into a disjunction. Disjunctions do not
+yield sensible tests as they become true on multiple bodies, which is
+usually not what you want. The runner can't warn for this.
+"""
+
+
 import inspect
 import clingo
 import sys
@@ -36,6 +66,8 @@ def parse_signature(s):
 
 @test
 def parse_some_signatures():
+    test.eq(('one', []), parse_signature("one"))
+    test.eq(('one', [('two', []), ('three', [])]), parse_signature("one(two, three)"))
     test.eq(('one', [('two', []), ('three', [])]), parse_signature("one(two, three)"))
     test.eq(('one', [2, 3]), parse_signature("one(2, 3)"))
     test.eq(('one', [('two', [2, ('aap', [])]), ('three', [42])]), parse_signature("one(two(2, aap), three(42))"))
@@ -91,7 +123,10 @@ class Tester:
 
     def all(self, *args):
         """ ASP API: add a named assert to be checked for each model """
-        self._asserts.add(clingo.Function("assert", args))
+        assrt = clingo.Function("assert", args)
+        if assrt in self._asserts:
+            print(f"WARNING: duplicate assert: {assrt}")
+        self._asserts.add(assrt)
         return args
 
 
@@ -118,9 +153,11 @@ class Tester:
     def add_function(self, func):
         self._funcs[func.__name__] = func
 
-
+   
     def __getattr__(self, name):
-        return self._funcs[name]
+        if name in self._funcs:
+            return self._funcs[name]
+        raise AttributeError(name)
 
 
 def read_programs(asp_code):
@@ -129,12 +166,12 @@ def read_programs(asp_code):
     programs = {'base': []}
     for i, line in enumerate(lines):
         if line.strip().startswith('#program'):
-            name, deps = parse_signature(line.split('#program')[1].strip()[:-1])
+            name, dependencies = parse_signature(line.split('#program')[1].strip()[:-1])
             if name in programs:
                 raise Exception(f"Duplicate test name: {name!r}")
-            programs[name] = deps
+            programs[name] = dependencies
             # rewrite into valid ASP (turn functions into plain terms)
-            lines[i] = f"#program {name}({','.join(dep[0] for dep in deps)})."
+            lines[i] = f"#program {name}({','.join(dep[0] for dep in dependencies)})."
     return lines, programs
 
 
@@ -172,7 +209,7 @@ def check_for_duplicate_test(raises:(Exception, "Duplicate test name: 'test_a'")
 
 
 
-def do_tests(lines, programs):
+def run_tests(lines, programs):
     for name in programs:
         if name.startswith('test'):
             global current_tester
@@ -181,11 +218,13 @@ def do_tests(lines, programs):
             control.add('\n'.join(lines))
 
             def prog_with_args(name):
-                deps = programs[name]
-                yield name, [clingo.Number(1) for _ in deps]
-                for n, d in deps:
-                    yield from prog_with_args(n)
+                dependencies = programs[name]
+                yield name, [clingo.Number(1) for _ in dependencies]
+                for dep_name, actual_args in dependencies:
+                    yield from prog_with_args(dep_name)
+
             to_ground = list(prog_with_args(name))
+            control.register_observer(tester)
             control.ground(to_ground, context = tester)
             control.solve(on_model = tester.on_model)
             yield name, tester.report()
@@ -194,7 +233,7 @@ def do_tests(lines, programs):
 
 def parse_and_run_tests(asp_code):
     lines, programs = read_programs(asp_code)
-    return do_tests(lines, programs)
+    return run_tests(lines, programs)
 
 
 def runasptests():
@@ -242,5 +281,16 @@ def dependencies():
      """)
     test.eq(('test_base', {'asserts': {'assert("base_facts")'       , 'assert(models(1))'}, 'models': 1}), next(t))
     test.eq(('test_one' , {'asserts': {'assert("one includes base")', 'assert(models(1))'}, 'models': 1}), next(t))
+
+
+@test
+def warn_for_disjunctions():
+    t = parse_and_run_tests("""
+        time(0; 1).
+        #program test_base(base).
+        assert(@all(time_exists)) :- time(T).
+        assert(@models(1)).
+     """)
+    test.eq(('test_base', {'asserts': {'assert(models(1))', 'assert(time_exists)'}, 'models': 1}), next(t))
 
 # more tests in __init__ to avoid circular imports

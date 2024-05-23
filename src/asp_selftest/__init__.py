@@ -7,7 +7,7 @@ from .runasptests import runasptests, register
 
 @test
 def program_with_python():
-    """ test import of 'register'; here because runasptests modules must ve finished importing """
+    """ test import of 'register'; here because runasptests modules must have finished importing """
     from .runasptests import parse_and_run_tests
     t = parse_and_run_tests("""
 #script (python)
