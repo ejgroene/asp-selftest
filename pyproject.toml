@@ -24,6 +24,10 @@ classifiers = [
 asp-tests = "asp_selftest:runasptests"
 
 
+[tool.setuptools]
+script-files = ["bin/runasptests.sh"]
+
+
 [project.urls]
 Homepage = "https://github.com/ejgroene/asp-selftest"
 Issues = "https://github.com/ejgroene/asp-selftest/issues"
