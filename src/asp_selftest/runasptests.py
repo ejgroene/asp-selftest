@@ -168,7 +168,7 @@ def read_programs(asp_code):
         if line.strip().startswith('#program'):
             name, dependencies = parse_signature(line.split('#program')[1].strip()[:-1])
             if name in programs:
-                raise Exception(f"Duplicate test name: {name!r}")
+                raise Exception(f"Duplicate program name: {name!r}")
             programs[name] = dependencies
             # rewrite into valid ASP (turn functions into plain terms)
             lines[i] = f"#program {name}({','.join(dep[0] for dep in dependencies)})."
@@ -204,30 +204,33 @@ def read_function_args():
 
 
 @test
-def check_for_duplicate_test(raises:(Exception, "Duplicate test name: 'test_a'")):
+def check_for_duplicate_test(raises:(Exception, "Duplicate program name: 'test_a'")):
     read_programs(""" #program test_a. \n #program test_a. """)
 
 
 
 def run_tests(lines, programs):
-    for name in programs:
-        if name.startswith('test'):
+    for prog_name, dependencies in programs.items():
+        if prog_name.startswith('test'):
             global current_tester
             tester = current_tester = Tester()
             control = clingo.Control(['0'])
             control.add('\n'.join(lines))
 
-            def prog_with_args(name):
-                dependencies = programs[name]
-                yield name, [clingo.Number(1) for _ in dependencies]
-                for dep_name, actual_args in dependencies:
-                    yield from prog_with_args(dep_name)
+            def prog_with_dependencies(name, dependencies):
+                yield name, [clingo.Number(42) for _ in dependencies]
+                for dep, args in dependencies:
+                    formal_args = programs.get(dep, [])
+                    formal_names = list(a[0] for a in formal_args)
+                    if len(args) != len(formal_names):
+                        raise Exception(f"Argument mismatch in {prog_name!r} for dependency {dep!r}. Required: {formal_names}, given: {args}.")
+                    yield dep, [clingo.Number(a) for a in args]
 
-            to_ground = list(prog_with_args(name))
+            to_ground = list(prog_with_dependencies(prog_name, dependencies))
             control.register_observer(tester)
             control.ground(to_ground, context = tester)
             control.solve(on_model = tester.on_model)
-            yield name, tester.report()
+            yield prog_name, tester.report()
 
 
 
@@ -268,19 +271,37 @@ def dependencies():
     t = parse_and_run_tests("""
         base_fact.
 
-        #program one(base).
+        #program one(b).
         one_fact.
 
         #program test_base(base).
         assert(@all("base_facts")) :- base_fact.
         assert(@models(1)).
 
-        #program test_one(one).
+        #program test_one(base, one(1)).
         assert(@all("one includes base")) :- base_fact, one_fact.
         assert(@models(1)).
      """)
     test.eq(('test_base', {'asserts': {'assert("base_facts")'       , 'assert(models(1))'}, 'models': 1}), next(t))
     test.eq(('test_one' , {'asserts': {'assert("one includes base")', 'assert(models(1))'}, 'models': 1}), next(t))
+
+
+@test
+def pass_constant_values():
+    t = parse_and_run_tests("""
+        #program fact_maker(n).
+        fact(n).
+
+        #program test_fact_2(fact_maker(2)).
+        assert(@all(two)) :- fact(2).
+        assert(@models(1)).
+
+        #program test_fact_4(fact_maker(4)).
+        assert(@all(four)) :- fact(4).
+        assert(@models(1)).
+     """)
+    test.eq(('test_fact_2', {'asserts': {'assert(two)', 'assert(models(1))'}, 'models': 1}), next(t))
+    test.eq(('test_fact_4', {'asserts': {'assert(four)', 'assert(models(1))'}, 'models': 1}), next(t))
 
 
 @test
