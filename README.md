@@ -1,7 +1,13 @@
 # asp-selftest
-In-source STTCPW test runner for Answer Set Programming (ASP) with Clingo.
+In-source test runner for Answer Set Programming (ASP) with Clingo.
 
-It is rough and unpolished, but it works.
+It provides:
+
+    * `asp-tests`: a standalone (Python) tool to run tests in a logic program.
+    * `bin/runasptests.sh`: Bash script to find all .lp files and run their tests.
+
+Both tools stop at first failure.
+
 
 GOAL
 ----
@@ -13,41 +19,46 @@ IDEA
 
 1. Use `#program`'s to identify units and their dependencies. Here we have a unit called `unitA` with a unit test for it called `testunitA`.
 
-       #program unitA.
+       #program unit_A.
     
-       #program testunitA(unitA).
+       #program test_unit_A(unit_A).
 
-2. Extend the notion of `#program` a bit by allowing to use functions for constants.  This allows `#program` units with constants being tested. Here is a unit `step` that is tested with constant `a` being substituted with `2`:
+   The implicit program `base` (see Clingo Guide) must be referenced explicitly if needed.
+
+
+2. Extend the notion of `#program` by allowing the use of functions instead of only constants.  This allows `#program` units with constants being tested. Here is a unit `step` that is tested with constant `a` being substituted with `2`:
 
        #program step(a).
     
        #program test_step(step(2)).
 
+   Note that using this feature makes the program incompatible with Clingo. The test runner has an option to transform a extended program back to compatible Clingo without running the tests.
+
+
 3. Within a test program, use `assert` with `@all` to ensure universal truths that must be in every model. We use `@all` to communicate to the runtime that this particular assert must be checked for presence in every model. Its argument is just a name for identification.
 
-       #program part.
-       { fix(A) : A=1..N } = 1 :- n(N).
-       
-       #program testpart(part).
-       n(10).
-       assert(@all(select_one)) :- { fix(X) : X=1..10 } = 1.
+        #program step(n).
+        fact(n).
+
+        #program test_step(step(3)).
+        assert(@all("step fact"))  :-  fact(3).
+
+   Note that `"step fact"` is just a way of distinquishing the assert. It can be an atom, a string, a number or anything else. Pay attention to the uniqueness in case of variables in the body. Take note of point 5 below.
+
 
 4. To enable testing constraints and to guard tests for empty model sets, we use `@models` to check for the expected number of models. In the example above, we would add:
 
-       assert(@models(10)).
+        assert(@models(1)).
 
-5. An interesting use case came up while testing uniqueness of terms. Suppose we want to guard against defining and input twice based on the fact that the first parameter of the function `input` is actually an unique identifier. We have to include this identifier in the assert, since we want it asserted for every possible identifier. So the assert becomes: `assert@all(input_is(Uniq)))`, with `Uniq`  being the identifier:
 
-       #program define_inputs().
-       input(input_a, 1, position(4), "Input A").       % full definition
-       input(input_b, 2, position(3), "Input B").       % full definition
-       input(Id)  :-  input(Id, _, _, _).               % shortcut for easier testing
+5. Care must be taken if variables in the body lead to expansion and conjunctions. See `duplicate_assert.lp`. The system gives a warning for:
 
-       #program test_inputs(define_inputs).
-       assert(@models(1)).
-       assert(@all(input_is(Uniq)))  :-  input(Uniq),  { input(Uniq, _, _, _) } = 1.
+        assert(@all(id_uniq))  :-  def_id(Id, _, _),  { def_id(Id, _, _) } = 1.
 
-   Note that if we would just write `assert(@all(input_is_unique))`, the test would succeed as long as if there is al least one input not defined twice, leaving all others untested. It turned out that the software could already do this. Only the name of the argument in Python changed from `name` to `term`.
+    Instead you have to write:
+
+        assert(@all(id_uniq(Id)))  :-  def_id(Id, _, _),  { def_id(Id, _, _) } = 1.
+
 
 TESTING
 -------
