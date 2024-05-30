@@ -1,14 +1,13 @@
 import selftest
 test = selftest.get_tester(__name__)
 
-from .runasptests import runasptests, register
 
+from .runasptests import parse_and_run_tests, register
 
 
 @test
 def program_with_python():
     """ test import of 'register'; here because runasptests modules must have finished importing """
-    from .runasptests import parse_and_run_tests
     t = parse_and_run_tests("""
 #script (python)
 import clingo
@@ -24,3 +23,4 @@ assert(@all("call @-function")) :- fact("aap").
 assert(@models(1)).
      """)
     test.eq(('test_call_registered_python_function', {'asserts': {'assert("call @-function")', 'assert(models(1))'}, 'models': 1}), next(t))
+

@@ -1,40 +1,10 @@
-#!/usr/bin/env python3
 
-""" Runs all tests in an ASP program.
-
-A test in ASP consists of a #program directive beginning with 'test'.
-The constants normally used as arguments are taken for the names of
-other programs that the test depends upon or wants to test. I.e.:
-
-    #program one.
-    one_fact.
-
-    #program setup.
-    ...
-
-    #program test_one(setup, one).
-    ...
-
-Asserts are done with @all and @models, embedded in an atom 'assert':
-    assert(@all("one-must-hold"))  :-  one_fact.
-    assert(@models(1)).
-
-They jointly express that 'assert("one-must-hold")' must be true in 
-all the expected models (exactly 1).
-
-"one-must-hold" can be any atom and generally must contain variables
-only when the rule expands into a disjunction. Disjunctions do not
-yield sensible tests as they become true on multiple bodies, which is
-usually not what you want. The runner can't warn for this.
-"""
-
+""" Functions to runs all tests in an ASP program. """
 
 import inspect
 import clingo
 import sys
 import ast
-import selftest
-test = selftest.get_tester(__name__)
 
 
 # Allow ASP programs started in Python to include Python themselves.
@@ -64,16 +34,8 @@ def parse_signature(s):
     return parse(ast.parse(s).body[0].value)
 
 
-@test
-def parse_some_signatures():
-    test.eq(('one', []), parse_signature("one"))
-    test.eq(('one', [('two', []), ('three', [])]), parse_signature("one(two, three)"))
-    test.eq(('one', [('two', []), ('three', [])]), parse_signature("one(two, three)"))
-    test.eq(('one', [2, 3]), parse_signature("one(2, 3)"))
-    test.eq(('one', [('two', [2, ('aap', [])]), ('three', [42])]), parse_signature("one(two(2, aap), three(42))"))
-
-
 current_tester = None
+
 
 def register(func):
     """ Selftest uses the context for supplying the functions @all and @models to the ASP program. 
@@ -84,32 +46,6 @@ def register(func):
     global current_tester
     if current_tester:
         current_tester.add_function(func)
-
-
-
-@test
-def register_asp_function():
-    global current_tester
-    def f(a):
-        pass
-    test.eq(None, current_tester)
-    register(f)
-    test.eq(None, current_tester)
-    fs = []
-    class X:
-        def add_function(self, f):
-            fs.append(f)
-    try:
-        current_tester = X()
-        register(f)
-        test.eq(f, fs[0])
-    finally:
-        current_tester = None
-
-
-@test
-def register_asp_function_is_function(raises:(AssertionError, "'aap' must be a function")):
-    register("aap")
 
 
 class Tester:
@@ -175,6 +111,85 @@ def read_programs(asp_code):
     return lines, programs
 
 
+def run_tests(lines, programs):
+    for prog_name, dependencies in programs.items():
+        if prog_name.startswith('test'):
+            global current_tester
+            tester = current_tester = Tester()
+            control = clingo.Control(['0'])
+            control.add('\n'.join(lines))
+
+            def prog_with_dependencies(name, dependencies):
+                yield name, [clingo.Number(42) for _ in dependencies]
+                for dep, args in dependencies:
+                    formal_args = programs.get(dep, [])
+                    formal_names = list(a[0] for a in formal_args)
+                    if len(args) != len(formal_names):
+                        raise Exception(f"Argument mismatch in {prog_name!r} for dependency {dep!r}. Required: {formal_names}, given: {args}.")
+                    yield dep, [clingo.Number(a) for a in args]
+
+            to_ground = list(prog_with_dependencies(prog_name, dependencies))
+            control.register_observer(tester)
+            control.ground(to_ground, context = tester)
+            control.solve(on_model = tester.on_model)
+            yield prog_name, tester.report()
+
+
+def parse_and_run_tests(asp_code):
+    lines, programs = read_programs(asp_code)
+    return run_tests(lines, programs)
+
+
+def run_asp_tests(*files):
+    for program_file in files:
+        print(f"Reading {program_file}.", flush=True)
+        asp_code = open(program_file).read()
+        for name, result in parse_and_run_tests(asp_code):
+            asserts = result['asserts']
+            models = result['models']
+            print(f"ASPUNIT: {name}: ", end='', flush=True)
+            print(f" {len(asserts)} asserts,  {models} model{'s' if models>1 else ''}")
+
+
+
+import selftest
+test = selftest.get_tester(__name__)
+
+
+@test
+def parse_some_signatures():
+    test.eq(('one', []), parse_signature("one"))
+    test.eq(('one', [('two', []), ('three', [])]), parse_signature("one(two, three)"))
+    test.eq(('one', [('two', []), ('three', [])]), parse_signature("one(two, three)"))
+    test.eq(('one', [2, 3]), parse_signature("one(2, 3)"))
+    test.eq(('one', [('two', [2, ('aap', [])]), ('three', [42])]), parse_signature("one(two(2, aap), three(42))"))
+
+
+@test
+def register_asp_function():
+    global current_tester
+    def f(a):
+        pass
+    test.eq(None, current_tester)
+    register(f)
+    test.eq(None, current_tester)
+    fs = []
+    class X:
+        def add_function(self, f):
+            fs.append(f)
+    try:
+        current_tester = X()
+        register(f)
+        test.eq(f, fs[0])
+    finally:
+        current_tester = None
+
+
+@test
+def register_asp_function_is_function(raises:(AssertionError, "'aap' must be a function")):
+    register("aap")
+
+
 @test
 def read_no_programs():
     lines, programs = read_programs(""" fact. """)
@@ -206,53 +221,6 @@ def read_function_args():
 @test
 def check_for_duplicate_test(raises:(Exception, "Duplicate program name: 'test_a'")):
     read_programs(""" #program test_a. \n #program test_a. """)
-
-
-
-def run_tests(lines, programs):
-    for prog_name, dependencies in programs.items():
-        if prog_name.startswith('test'):
-            global current_tester
-            tester = current_tester = Tester()
-            control = clingo.Control(['0'])
-            control.add('\n'.join(lines))
-
-            def prog_with_dependencies(name, dependencies):
-                yield name, [clingo.Number(42) for _ in dependencies]
-                for dep, args in dependencies:
-                    formal_args = programs.get(dep, [])
-                    formal_names = list(a[0] for a in formal_args)
-                    if len(args) != len(formal_names):
-                        raise Exception(f"Argument mismatch in {prog_name!r} for dependency {dep!r}. Required: {formal_names}, given: {args}.")
-                    yield dep, [clingo.Number(a) for a in args]
-
-            to_ground = list(prog_with_dependencies(prog_name, dependencies))
-            control.register_observer(tester)
-            control.ground(to_ground, context = tester)
-            control.solve(on_model = tester.on_model)
-            yield prog_name, tester.report()
-
-
-
-def parse_and_run_tests(asp_code):
-    lines, programs = read_programs(asp_code)
-    return run_tests(lines, programs)
-
-
-def runasptests():
-    for program_file in sys.argv[1:]:
-        print(f"Reading {program_file}.", flush=True)
-        asp_code = open(program_file).read()
-        for name, result in parse_and_run_tests(asp_code):
-            asserts = result['asserts']
-            models = result['models']
-            print(f"ASPUNIT: {name}: ", end='', flush=True)
-            print(f" {len(asserts)} asserts,  {models} model{'s' if models>1 else ''}")
-        #sys.tracebacklimit = 0
-
-
-if __name__ == '__main__':
-    runasptests()
 
 
 @test
@@ -313,5 +281,6 @@ def warn_for_disjunctions():
         assert(@models(1)).
      """)
     test.eq(('test_base', {'asserts': {'assert(models(1))', 'assert(time_exists)'}, 'models': 1}), next(t))
+
 
 # more tests in __init__ to avoid circular imports
