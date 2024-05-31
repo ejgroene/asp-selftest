@@ -1,4 +1,5 @@
-# asp-selftest
+asp-selftest
+============
 In-source test runner for Answer Set Programming (ASP) with Clingo.
 
 It provides:
@@ -9,10 +10,31 @@ It provides:
 Both tools stop at first failure.
 
 
-GOAL
-----
+RUNNING
+-------
 
-Enable first class unit testing in ASP using native ASP code and as much known concepts and as few magic as possible.
+After installation via pip, run it using:
+
+    $ asp-tests <file.lp> ...
+
+Alternatively you can run it as a module, given that either the working directory of the PYTHONPATH are set to 'src':
+
+    $ python -m asp_selftest <file.lp> ...
+
+There are options to silents the in-source Python tests etc, have a look:
+
+    $ asp-tests -h
+
+
+TESTING
+-------
+The code is equiped with in-source Python tests which always run. You can silence them with --silent.
+
+
+TODO
+----
+To use the program without the tests: Not Yet Implemented. But you can use the `base` program anywhere of course, since all `#program`s are ignored by default.
+
 
 IDEA
 ----
@@ -60,12 +82,3 @@ IDEA
         assert(@all(id_uniq(Id)))  :-  def_id(Id, _, _),  { def_id(Id, _, _) } = 1.
 
 
-TESTING
--------
-
-Tests are run using the testrunner:
-
-    $ python asp-tests example.lp
-    teststep,  2 asserts,  10 models.  OK
-
-To use the program without the tests: Not Yet Implemented. But you can use the `base` program anywhere of course, since all `#program`s are ignored by default.
