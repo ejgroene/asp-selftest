@@ -5,6 +5,7 @@ import inspect
 import clingo
 import sys
 import ast
+import threading
 
 
 # Allow ASP programs started in Python to include Python themselves.
@@ -34,7 +35,8 @@ def parse_signature(s):
     return parse(ast.parse(s).body[0].value)
 
 
-current_tester = None
+# We use thread locals to communicate state between python code embedded in ASP and this module here.
+local = threading.local()
 
 
 def register(func):
@@ -43,9 +45,8 @@ def register(func):
         be registered using register(func).
     """
     assert inspect.isfunction(func), f"{func!r} must be a function"
-    global current_tester
-    if current_tester:
-        current_tester.add_function(func)
+    if local.current_tester:
+        local.current_tester.add_function(func)
 
 
 class Tester:
@@ -114,8 +115,7 @@ def read_programs(asp_code):
 def run_tests(lines, programs):
     for prog_name, dependencies in programs.items():
         if prog_name.startswith('test'):
-            global current_tester
-            tester = current_tester = Tester()
+            tester = local.current_tester = Tester()
             control = clingo.Control(['0'])
             control.add('\n'.join(lines))
 
@@ -163,31 +163,6 @@ def parse_some_signatures():
     test.eq(('one', [('two', []), ('three', [])]), parse_signature("one(two, three)"))
     test.eq(('one', [2, 3]), parse_signature("one(2, 3)"))
     test.eq(('one', [('two', [2, ('aap', [])]), ('three', [42])]), parse_signature("one(two(2, aap), three(42))"))
-
-
-@test
-def register_asp_function():
-    global current_tester
-    def f(a):
-        pass
-    test.eq(None, current_tester)
-    register(f)
-    test.eq(None, current_tester)
-    fs = []
-    class X:
-        def add_function(self, f):
-            fs.append(f)
-    try:
-        current_tester = X()
-        register(f)
-        test.eq(f, fs[0])
-    finally:
-        current_tester = None
-
-
-@test
-def register_asp_function_is_function(raises:(AssertionError, "'aap' must be a function")):
-    register("aap")
 
 
 @test

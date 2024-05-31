@@ -22,7 +22,7 @@ classifiers = [
 
 
 [project.scripts]
-asp-tests = "asp_selftest:__main__"
+asp-tests = "asp_selftest.__main__:main"
 
 
 [tool.setuptools]
