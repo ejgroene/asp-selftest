@@ -3,18 +3,15 @@
 
 import selftest
 import argparse
-from .arguments import parse
+from .arguments import parse, parse_silent
 
 
 # First of all, inspect --silent flag to silence tests
-try:
-    args = parse()
-except argparse.ArgumentError:
-    pass
-else:
-    if args.silent:
-        # must be called first and can only be called once
-        selftest.basic_config(run=False)
+args = parse_silent()
+if args.silent:
+    # must be called first and can only be called once
+    selftest.basic_config(run=False)
+
 
 test = selftest.get_tester(__name__)
 
