@@ -7,9 +7,7 @@ build-backend = "setuptools.build_meta"
 name = "asp_selftest"
 # dynamic as per setuptools_scm
 dynamic = ["version"]
-authors = [
-  { name="Erik Groeneveld", email="ejgroene@ieee.org" },
-]
+authors = [ { name="Erik Groeneveld", email="ejgroene@ieee.org" }, ]
 description = "A tool for running in-source unittests for Anwer Set Programming (ASP)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -38,9 +36,6 @@ Homepage = "https://github.com/ejgroene/asp-selftest"
 Issues = "https://github.com/ejgroene/asp-selftest/issues"
 
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
-
 [tool.setuptools_scm]
 # empty is enough to avtivate its magic of including a version from the latest tag
+# additionally it adds all files under version control to the package
