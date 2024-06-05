@@ -45,8 +45,8 @@ def register(func):
         be registered using register(func).
     """
     assert inspect.isfunction(func), f"{func!r} must be a function"
-    if local.current_tester:
-        local.current_tester.add_function(func)
+    if tester := getattr(local, 'current_tester'):  #TODO testme hasattr iso local.current_tester
+        tester.add_function(func)
 
 
 class Tester:

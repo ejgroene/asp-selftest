@@ -9,8 +9,15 @@ from .arguments import parse, parse_silent
 # First of all, inspect --silent flag to silence tests
 args = parse_silent()
 if args.silent:
-    # must be called first and can only be called once
-    selftest.basic_config(run=False)
+    try:
+        # must be called first and can only be called once, but, when
+        # we are imported from another app that also uses --silent, 
+        # that app might already have called basic_config()
+        # TODO testme
+        selftest.basic_config(run=False)
+    except AssertionError:
+        root = selftest.get_tester(None)
+        assert not root.option_get('run'), "Tester must have been configured to NOT run tests."
 
 
 test = selftest.get_tester(__name__)
