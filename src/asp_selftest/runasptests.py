@@ -77,7 +77,21 @@ class Tester:
         """ Callback when model is found; count model and check all asserts. """
         self._models_ist += 1
         failures = [a for a in self._asserts if not model.contains(a)]
-        assert not failures, f"FAILED: {', '.join(map(str, failures))}\nMODEL: {model}"
+        if failures:
+            symbols = sorted(str(s) for s in model.symbols(shown=True))
+            if len(symbols) > 0:
+                col_width = (max(len(w) for w in symbols)) + 2
+                import shutil
+                import itertools
+                width, h = shutil.get_terminal_size((80, 20))
+                cols = width // col_width
+                modelstr = '\n'.join(
+                        ''.join(s.ljust(col_width) for s in b)
+                    for b in itertools.batched(symbols, max(cols, 1)))
+            else:
+                modelstr = "<empty>"
+
+            raise AssertionError(f"FAILED: {', '.join(map(str, failures))}\nMODEL:\n{modelstr}")
         return model
 
 

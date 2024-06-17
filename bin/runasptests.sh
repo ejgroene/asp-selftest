@@ -5,10 +5,11 @@
 for fname in `find . -name "*.lp"`; do
     pushd `dirname ${fname}` > /dev/null
     asp-tests `basename ${fname}` --silent
-    if [ $? -ne 0 ]; then
-        echo "An error occurred. Quiting."
+    error=$?
+    if [ $error -ne 0 ]; then
+        echo "$(tput bold)An error occurred during asp-test$(tput sgr0). Quiting."
         popd > /dev/null
-        exit
+        exit $error
     fi
     popd > /dev/null
 done
