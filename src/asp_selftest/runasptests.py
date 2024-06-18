@@ -353,6 +353,7 @@ def parse_warning_raise_error(stderr):
         ground_and_solve(["a :- b."])
     with test.raises(SyntaxError, 'in ASP code: operation undefined:  ("a"/2)\na("a"/2).\n  ^^^^^'):
         ground_and_solve(['a("a"/2).'])
+
     with test.raises(SyntaxError, """in ASP code: unsafe variables in
 a(A) :- b.
 ^^^^^^^^^^
@@ -361,6 +362,7 @@ a(A) :- b.
     ^
    'A' is unsafe"""):
         ground_and_solve(['a(A) :- b.'])
+
     with test.raises(SyntaxError, """in ASP code: global variable in tuple of aggregate element:  X
 a(1). sum(X) :- X = #sum { X : a(A) }.
                            ^"""):

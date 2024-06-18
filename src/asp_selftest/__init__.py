@@ -76,3 +76,5 @@ def register_asp_function():
 def register_asp_function_is_function(raises:(AssertionError, "'aap' must be a function")):
     register("aap")
 
+
+from .runasptests import ground_and_solve
