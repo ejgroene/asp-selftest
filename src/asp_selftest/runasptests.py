@@ -126,12 +126,56 @@ def read_programs(asp_code):
     return lines, programs
 
 
+def ground_and_solve(lines, programs=(('base', ()),), observer=None, context=None, on_model=None):
+    errors = []
+    def warn2raise(code, msg):
+        """ collect exceptions from warnings logged by Clingo """
+
+        def parse_block(msg):
+            """ parses location in "<block>:2:1-2: error: syntax error, unexpected EOF" """
+            _, line, pos, __, msg, *more = msg.split(':', 5)
+            start, end = pos.split('-')
+            return int(line), int(start), int(end), msg.strip(), ':'.join(more)
+
+        line, start, end, msg, more = parse_block(msg)
+        snippet = [lines] if isinstance(lines, str) else lines[max(0, line-5):line]
+
+        def add_arrow(start, end):
+            snippet.append(' ' * (start-1) + '^' * (end-start))
+
+        add_arrow(start, end)
+
+        if '<block>:' in more:
+            """ possibly nested, more precise location given by Clingo """
+            *code, block = more.splitlines()
+            snippet.extend(code)
+            _, start, end, msg2, __ = parse_block(block)
+            add_arrow(start+2, end+2)
+            snippet.append(' '*start + msg2)
+        elif more:
+            msg += ':' + more.replace('\n', '')
+
+        errors.append(SyntaxError(f"in ASP code: {msg}\n{'\n'.join(snippet)}"))
+
+    control = clingo.Control(['0'], logger=warn2raise, message_limit=1)
+    if observer:
+        control.register_observer(observer)
+    try:
+        control.add('\n'.join(lines))
+        control.ground(programs, context=context)
+    except RuntimeError as e:
+        # we assume an corresponding log message has been recorded
+        raise errors[0].with_traceback(None) from None
+    if errors:
+        raise errors[0]
+    control.solve(on_model=on_model)
+    return control
+
+
 def run_tests(lines, programs):
     for prog_name, dependencies in programs.items():
         if prog_name.startswith('test'):
             tester = local.current_tester = Tester()
-            control = clingo.Control(['0'])
-            control.add('\n'.join(lines))
 
             def prog_with_dependencies(name, dependencies):
                 yield name, [clingo.Number(42) for _ in dependencies]
@@ -143,9 +187,7 @@ def run_tests(lines, programs):
                     yield dep, [clingo.Number(a) for a in args]
 
             to_ground = list(prog_with_dependencies(prog_name, dependencies))
-            control.register_observer(tester)
-            control.ground(to_ground, context = tester)
-            control.solve(on_model = tester.on_model)
+            ground_and_solve(lines, to_ground, tester, tester, tester.on_model)
             yield prog_name, tester.report()
 
 
@@ -271,5 +313,57 @@ def warn_for_disjunctions():
      """)
     test.eq(('test_base', {'asserts': {'assert(models(1))', 'assert(time_exists)'}, 'models': 1}), next(t))
 
+
+@test
+def ground_and_solve_basics():
+    result = ground_and_solve(["fact."])
+    test.eq([clingo.Function('fact')], [s.symbol for s in result.symbolic_atoms.by_signature('fact', 0)])
+
+    result = ground_and_solve(["#program one. fect."], programs=(('one', ()),))
+    test.eq([clingo.Function('fect')], [s.symbol for s in result.symbolic_atoms.by_signature('fect', 0)])
+
+    class O:
+        @classmethod
+        def init_program(self, *a):
+            self.a = a
+    ground_and_solve(["fict."], observer=O)
+    test.eq((True,), O.a)
+
+    class C:
+        @classmethod
+        def goal(self, *a):
+            self.a = a
+            return a
+    ground_and_solve(['foct(@goal("g")).'], context=C)
+    test.eq("(String('g'),)", str(C.a))
+
+    done = [False]
+    def on_model(m):
+        test.truth(m.contains(clingo.Function('fuct')))
+        done[0] = True
+    ground_and_solve(['fuct.'], on_model=on_model)
+    test.truth(done[0])
+
+
+@test
+def parse_warning_raise_error(stderr):
+    with test.raises(SyntaxError, "in ASP code: syntax error, unexpected EOF\nabc\n^"):
+        ground_and_solve(["abc"])
+    with test.raises(SyntaxError, "in ASP code: atom does not occur in any rule head:  b\na :- b.\n     ^"):
+        ground_and_solve(["a :- b."])
+    with test.raises(SyntaxError, 'in ASP code: operation undefined:  ("a"/2)\na("a"/2).\n  ^^^^^'):
+        ground_and_solve(['a("a"/2).'])
+    with test.raises(SyntaxError, """in ASP code: unsafe variables in
+a(A) :- b.
+^^^^^^^^^^
+
+  a(A):-[#inc_base];b.
+    ^
+   'A' is unsafe"""):
+        ground_and_solve(['a(A) :- b.'])
+    with test.raises(SyntaxError, """in ASP code: global variable in tuple of aggregate element:  X
+a(1). sum(X) :- X = #sum { X : a(A) }.
+                           ^"""):
+        ground_and_solve(['a(1). sum(X) :- X = #sum { X : a(A) }.'])
 
 # more tests in __init__ to avoid circular imports
