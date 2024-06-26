@@ -53,6 +53,7 @@ class Tester:
 
     def __init__(self):
         self._asserts = set()
+        self._anys = set()
         self._models_ist = 0
         self._models_soll = -1
         self._funcs = {}
@@ -67,6 +68,14 @@ class Tester:
         return args
 
 
+    def any(self, *args):
+        assrt = clingo.Function("assert", args)
+        if assrt in self._anys:
+            print(f"WARNING: duplicate assert: {assrt}")
+        self._anys.add(assrt)
+        return args
+
+
     def models(self, n):
         """ ASP API: add assert for the total number of models """
         self._models_soll = n.number
@@ -76,6 +85,9 @@ class Tester:
     def on_model(self, model):
         """ Callback when model is found; count model and check all asserts. """
         self._models_ist += 1
+        for a in set(self._anys):
+            if model.contains(a):
+                self._anys.remove(a)
         failures = [a for a in self._asserts if not model.contains(a)]
         if failures:
             symbols = sorted(str(s) for s in model.symbols(shown=True))
@@ -98,13 +110,14 @@ class Tester:
     def report(self):
         """ When done, check assert(@models(n)) explicitly, then report. """
         assert self._models_ist == self._models_soll, f"Expected {self._models_soll} models, found {self._models_ist}."
+        assert not self._anys, f"Asserts not in any model:\n{'\n'.join(str(a) for a in self._anys)}"
         return dict(asserts={str(a) for a in self._asserts}, models=self._models_ist)
 
 
     def add_function(self, func):
         self._funcs[func.__name__] = func
 
-   
+    
     def __getattr__(self, name):
         if name in self._funcs:
             return self._funcs[name]
@@ -130,15 +143,21 @@ def ground_and_solve(lines, programs=(('base', ()),), observer=None, context=Non
     errors = []
     def warn2raise(code, msg):
         """ collect exceptions from warnings logged by Clingo """
+        print(code, msg, file=sys.stderr)
 
         def parse_block(msg):
             """ parses location in "<block>:2:1-2: error: syntax error, unexpected EOF" """
-            _, line, pos, __, msg, *more = msg.split(':', 5)
+            file, line, pos, __, msg, *more = msg.split(':', 5)
             start, end = pos.split('-')
-            return int(line), int(start), int(end), msg.strip(), ':'.join(more)
+            return file, int(line), int(start), int(end), msg.strip(), ':'.join(more)
 
-        line, start, end, msg, more = parse_block(msg)
-        snippet = [lines] if isinstance(lines, str) else lines[max(0, line-5):line]
+        file, line, start, end, msg, more = parse_block(msg)
+        if file == '<block>':
+            srclines = lines
+        else:
+            # TODO TESTME
+            srclines = [l.removesuffix('\n') for l in open(file).readlines()]
+        snippet = [srclines] if isinstance(srclines, str) else srclines[max(0, line-5):line]
 
         def add_arrow(start, end):
             snippet.append(' ' * (start-1) + '^' * (end-start))
@@ -147,9 +166,10 @@ def ground_and_solve(lines, programs=(('base', ()),), observer=None, context=Non
 
         if '<block>:' in more:
             """ possibly nested, more precise location given by Clingo """
+            # TODO TESTME + if not block but file
             *code, block = more.splitlines()
             snippet.extend(code)
-            _, start, end, msg2, __ = parse_block(block)
+            file, _, start, end, msg2, __ = parse_block(block)
             add_arrow(start+2, end+2)
             snippet.append(' '*start + msg2)
         elif more:
@@ -180,6 +200,7 @@ def run_tests(lines, programs):
             def prog_with_dependencies(name, dependencies):
                 yield name, [clingo.Number(42) for _ in dependencies]
                 for dep, args in dependencies:
+                    assert dep in programs, f"Dependency {dep} of {name} not found."
                     formal_args = programs.get(dep, [])
                     formal_names = list(a[0] for a in formal_args)
                     if len(args) != len(formal_names):
@@ -187,7 +208,10 @@ def run_tests(lines, programs):
                     yield dep, [clingo.Number(a) for a in args]
 
             to_ground = list(prog_with_dependencies(prog_name, dependencies))
-            ground_and_solve(lines, to_ground, tester, tester, tester.on_model)
+            try:
+                ground_and_solve(lines, to_ground, tester, tester, tester.on_model)
+            except Exception as e:
+                raise Exception(f"Error while running {prog_name}.") from e
             yield prog_name, tester.report()
 
 
@@ -367,5 +391,32 @@ a(A) :- b.
 a(1). sum(X) :- X = #sum { X : a(A) }.
                            ^"""):
         ground_and_solve(['a(1). sum(X) :- X = #sum { X : a(A) }.'])
+
+
+#  TODO:
+"""
+SyntaxError: in ASP code: unsafe variables in
+output(T, R, rijweg_vrij)  :-
+    rijweg(R),
+    time(T),
+    input(T, R, rijweg_ingesteld).   <<<<<<<<<< . niet hier!
+    input(T, R, bgz).
+    ^^^^^^^^^^^^^^^^^
+
+  input(T,R,bgz):-[#inc_base].
+<block>:28:14-15: note: 'R' is unsafe
+            ^
+           'T' is unsafe
+"""
+
+"""
+SyntaxError: in ASP code: syntax error, unexpected:, expecting .
+                                               ^
+
+Kwam van:
+MessageCode.RuntimeError ./interlocking/general/normaal_voorwaarde_h.lp:50:48-49: error: syntax error, unexpected :, expecting .
+Er stond: #program test_rijweg_vrij(rijweg_170_182, base):
+(: aan het einde, moet . zijn)
+"""
 
 # more tests in __init__ to avoid circular imports
