@@ -49,7 +49,7 @@ def check_flags():
 
 
 
-from .runasptests import local, register
+from .runasptests import local, register, format_symbols
 
 
 @test
@@ -77,4 +77,4 @@ def register_asp_function_is_function(raises:(AssertionError, "'aap' must be a f
     register("aap")
 
 
-from .runasptests import ground_and_solve
+from .runasptests import ground_and_solve, ground_exc

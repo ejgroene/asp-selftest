@@ -3,9 +3,13 @@
 
 import inspect
 import clingo
+import os
 import sys
 import ast
 import threading
+import shutil
+import itertools
+import traceback
 
 
 # Allow ASP programs started in Python to include Python themselves.
@@ -49,6 +53,20 @@ def register(func):
         tester.add_function(func)
 
 
+def format_symbols(symbols):
+    symbols = sorted(str(s) for s in symbols)
+    if len(symbols) > 0:
+        col_width = (max(len(w) for w in symbols)) + 2
+        width, h = shutil.get_terminal_size((80, 20))
+        cols = width // col_width
+        modelstr = '\n'.join(
+                ''.join(s.ljust(col_width) for s in b)
+            for b in itertools.batched(symbols, max(cols, 1)))
+    else:
+        modelstr = "<empty>"
+    return modelstr
+
+
 class Tester:
 
     def __init__(self):
@@ -90,18 +108,7 @@ class Tester:
                 self._anys.remove(a)
         failures = [a for a in self._asserts if not model.contains(a)]
         if failures:
-            symbols = sorted(str(s) for s in model.symbols(shown=True))
-            if len(symbols) > 0:
-                col_width = (max(len(w) for w in symbols)) + 2
-                import shutil
-                import itertools
-                width, h = shutil.get_terminal_size((80, 20))
-                cols = width // col_width
-                modelstr = '\n'.join(
-                        ''.join(s.ljust(col_width) for s in b)
-                    for b in itertools.batched(symbols, max(cols, 1)))
-            else:
-                modelstr = "<empty>"
+            modelstr = format_symbols(model.symbols(shown=True))
 
             raise AssertionError(f"FAILED: {', '.join(map(str, failures))}\nMODEL:\n{modelstr}")
         return model
@@ -139,57 +146,70 @@ def read_programs(asp_code):
     return lines, programs
 
 
-def ground_and_solve(lines, programs=(('base', ()),), observer=None, context=None, on_model=None):
+def parse_block(msg):
+    file, line, pos, __, msg, *more = msg.split(':', 5)
+    start, end = pos.split('-')
+    return file, int(line), int(start), int(end), msg.strip(), ':'.join(more)
+
+
+def ground_exc(program, label=None, arguments=[], parts=(('base',()),), observer=None, context=None):
+    """ grounds an aps program turning messages/warnings into SyntaxErrors """
+    lines = program.splitlines() if isinstance(program, str) else program
     errors = []
+
     def warn2raise(code, msg):
-        """ collect exceptions from warnings logged by Clingo """
-        print(code, msg, file=sys.stderr)
+        """ Clingo calls this, but can't handle exceptions well, so we wrap everything. """
+        name = repr(label) if label else "ASP code"
+        try:
+            file, line, start, end, msg, more = parse_block(msg)
+            if file == '<block>':
+                srclines = lines
+            else:
+                name = file
+                srclines = [l.removesuffix('\n') for l in open(file).readlines()]
+            snippet = srclines[max(0, line-5):line]
 
-        def parse_block(msg):
-            """ parses location in "<block>:2:1-2: error: syntax error, unexpected EOF" """
-            file, line, pos, __, msg, *more = msg.split(':', 5)
-            start, end = pos.split('-')
-            return file, int(line), int(start), int(end), msg.strip(), ':'.join(more)
+            def add_arrow(start, end):
+                snippet.append(' ' * (start-1) + '^' * (end-start))
 
-        file, line, start, end, msg, more = parse_block(msg)
-        if file == '<block>':
-            srclines = lines
-        else:
-            # TODO TESTME
-            srclines = [l.removesuffix('\n') for l in open(file).readlines()]
-        snippet = [srclines] if isinstance(srclines, str) else srclines[max(0, line-5):line]
+            add_arrow(start, end)
 
-        def add_arrow(start, end):
-            snippet.append(' ' * (start-1) + '^' * (end-start))
+            if '<block>:' in more:
+                *code, block = more.splitlines()
+                snippet.extend(code)
+                file, _, start, end, msg2, __ = parse_block(block)
+                add_arrow(start+2, end+2)
+                snippet.append(' '*start + msg2)
+            elif more:
+                msg += ':' + more.replace('\n', '')
 
-        add_arrow(start, end)
+            errors.append(SyntaxError(f"in {name}: {msg}\n{'\n'.join(snippet)}"))
+        except BaseException as e:
+            """ unexpected exception in the code above """
+            errors.append(e)
 
-        if '<block>:' in more:
-            """ possibly nested, more precise location given by Clingo """
-            # TODO TESTME + if not block but file
-            *code, block = more.splitlines()
-            snippet.extend(code)
-            file, _, start, end, msg2, __ = parse_block(block)
-            add_arrow(start+2, end+2)
-            snippet.append(' '*start + msg2)
-        elif more:
-            msg += ':' + more.replace('\n', '')
-
-        errors.append(SyntaxError(f"in ASP code: {msg}\n{'\n'.join(snippet)}"))
-
-    control = clingo.Control(['0'], logger=warn2raise, message_limit=1)
+    control = clingo.Control(arguments, logger=warn2raise, message_limit=1)
     if observer:
         control.register_observer(observer)
     try:
         control.add('\n'.join(lines))
-        control.ground(programs, context=context)
-    except RuntimeError as e:
-        # we assume an corresponding log message has been recorded
-        raise errors[0].with_traceback(None) from None
+        control.ground(parts, context=context)
+    except BaseException as e:
+        if errors:
+            raise errors[0].with_traceback(None) from None
+        else:
+            raise
     if errors:
         raise errors[0]
-    control.solve(on_model=on_model)
     return control
+
+
+def ground_and_solve(lines, on_model=None, **kws):
+    control = ground_exc(lines, arguments=['0'], **kws)
+    result = None
+    if on_model:
+        result = control.solve(on_model=on_model)
+    return control, result
 
 
 def run_tests(lines, programs):
@@ -209,9 +229,10 @@ def run_tests(lines, programs):
 
             to_ground = list(prog_with_dependencies(prog_name, dependencies))
             try:
-                ground_and_solve(lines, to_ground, tester, tester, tester.on_model)
+                ground_and_solve(lines, parts=to_ground, observer=tester, context=tester, on_model=tester.on_model)
             except Exception as e:
-                raise Exception(f"Error while running {prog_name}.") from e
+                e.add_note(f"Error while running {prog_name}.")
+                raise e from None
             yield prog_name, tester.report()
 
 
@@ -339,12 +360,83 @@ def warn_for_disjunctions():
 
 
 @test
-def ground_and_solve_basics():
-    result = ground_and_solve(["fact."])
-    test.eq([clingo.Function('fact')], [s.symbol for s in result.symbolic_atoms.by_signature('fact', 0)])
+def format_empty_model():
+    r = parse_and_run_tests("""
+        #program test_model_formatting.
+        #external what.
+        assert(@all(test)) :- what.
+    """)
+    with test.raises(AssertionError, """FAILED: assert(test)
+MODEL:
+<empty>"""):
+        next(r)
 
-    result = ground_and_solve(["#program one. fect."], programs=(('one', ()),))
-    test.eq([clingo.Function('fect')], [s.symbol for s in result.symbolic_atoms.by_signature('fect', 0)])
+
+@test
+def format_model_small():
+    import unittest.mock as mock
+    r = parse_and_run_tests("""
+        #program test_model_formatting.
+        this_is_a_fact(1..2).
+        #external what.
+        assert(@all(test)) :- what.
+    """)
+    with test.raises(AssertionError, """FAILED: assert(test)
+MODEL:
+this_is_a_fact(1)  
+this_is_a_fact(2)  """):  
+        with mock.patch("shutil.get_terminal_size", lambda _: (37,20)):
+            next(r)
+
+
+@test
+def format_model_wide():
+    import unittest.mock as mock
+    r = parse_and_run_tests("""
+        #program test_model_formatting.
+        this_is_a_fact(1..3).
+        #external what.
+        assert(@all(test)) :- what.
+    """)
+    with test.raises(AssertionError, """FAILED: assert(test)
+MODEL:
+this_is_a_fact(1)  this_is_a_fact(2)  
+this_is_a_fact(3)  """):  
+        with mock.patch("shutil.get_terminal_size", lambda _: (38,20)):
+            next(r)
+
+
+@test
+def ground_exc_with_label():
+    with test.raises(SyntaxError, """in 'my code': syntax error, unexpected <IDENTIFIER>
+an error
+   ^^^^^"""):
+        ground_exc("an error", label='my code')
+
+
+@test
+def exception_in_included_file(tmp_path):
+    f = tmp_path/'error.lp'
+    f.write_text("error")
+    old = os.environ.get('CLINGOPATH')
+    try:
+        os.environ['CLINGOPATH'] = tmp_path.as_posix()
+        with test.raises(SyntaxError, f"""in {f.as_posix()}: syntax error, unexpected EOF
+error
+^"""):
+            ground_exc("""#include "error.lp".""", label='main.lp')
+    finally:
+        if old:
+            os.environ['CLINGOPATH'] = old
+
+
+@test
+def ground_and_solve_basics():
+    control, result = ground_and_solve(["fact."])
+    test.eq([clingo.Function('fact')], [s.symbol for s in control.symbolic_atoms.by_signature('fact', 0)])
+
+    control, result = ground_and_solve(["#program one. fect."], parts=(('one', ()),))
+    test.eq([clingo.Function('fect')], [s.symbol for s in control.symbolic_atoms.by_signature('fect', 0)])
 
     class O:
         @classmethod
@@ -371,21 +463,21 @@ def ground_and_solve_basics():
 
 @test
 def parse_warning_raise_error(stderr):
-    with test.raises(SyntaxError, "in ASP code: syntax error, unexpected EOF\nabc\n^"):
-        ground_and_solve(["abc"])
+    with test.raises(SyntaxError, "in 'code_a': syntax error, unexpected EOF\nabc\n^"):
+        ground_and_solve(["abc"], label='code_a')
     with test.raises(SyntaxError, "in ASP code: atom does not occur in any rule head:  b\na :- b.\n     ^"):
         ground_and_solve(["a :- b."])
     with test.raises(SyntaxError, 'in ASP code: operation undefined:  ("a"/2)\na("a"/2).\n  ^^^^^'):
         ground_and_solve(['a("a"/2).'])
 
-    with test.raises(SyntaxError, """in ASP code: unsafe variables in
+    with test.raises(SyntaxError, """in 'code b': unsafe variables in
 a(A) :- b.
 ^^^^^^^^^^
 
   a(A):-[#inc_base];b.
     ^
    'A' is unsafe"""):
-        ground_and_solve(['a(A) :- b.'])
+        ground_and_solve(['a(A) :- b.'], label='code b')
 
     with test.raises(SyntaxError, """in ASP code: global variable in tuple of aggregate element:  X
 a(1). sum(X) :- X = #sum { X : a(A) }.
