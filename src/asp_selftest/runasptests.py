@@ -4,6 +4,7 @@
 import inspect
 import clingo
 import os
+import re
 import sys
 import ast
 import threading
@@ -15,6 +16,11 @@ import traceback
 # Allow ASP programs started in Python to include Python themselves.
 from clingo.script import enable_python
 enable_python()
+
+
+import selftest
+test = selftest.get_tester(__name__)
+
 
 
 def parse_signature(s):
@@ -146,10 +152,41 @@ def read_programs(asp_code):
     return lines, programs
 
 
-def parse_block(msg):
-    file, line, pos, __, msg, *more = msg.split(':', 5)
-    start, end = pos.split('-')
-    return file, int(line), int(start), int(end), msg.strip(), ':'.join(more)
+def parse_message(msg):
+    return [(file, int(line), int(start), int(end), key, msg, more) 
+            for file, line, start, end, key, msg, more
+            in re.findall(r"(?m)^(.+?):(\d+):(\d+)-(\d+):\s(.+?):\s([^\n]+)(?:\n(\s\s.+))?", msg)]
+
+
+@test
+def parse_clingo_error_messages():
+    test.eq([('<block>', 1, 6, 7, 'info', 'atom does not occur in any rule head:', '  b')],
+            parse_message("<block>:1:6-7: info: atom does not occur in any rule head:\n  b"))
+    test.eq([('<block>', 1, 4, 9, 'error', 'syntax error, unexpected <IDENTIFIER>', '')],
+            parse_message("<block>:1:4-9: error: syntax error, unexpected <IDENTIFIER>"))
+    test.eq([('/var/folders/fn/2hl6h1jn4772vw7j9hlg9zjm0000gn/T/tmpfy706dra/error.lp', 2, 1, 2,
+              'error', 'syntax error, unexpected EOF', '')],
+            parse_message("/var/folders/fn/2hl6h1jn4772vw7j9hlg9zjm0000gn/T/tmpfy706dra/error.lp:2:1-2:"
+                          " error: syntax error, unexpected EOF"))
+    test.eq([('<block>', 1, 3, 8, 'info', 'operation undefined:', '  ("a"/2)')],
+            parse_message('<block>:1:3-8: info: operation undefined:\n  ("a"/2)'))
+    test.eq([('<blOck>', 1, 1, 11, 'error', 'unsafe variables in:', '  a(A):-[#inc_base];b.'),
+             ('<block>', 1, 3, 4, 'note', "'A' is unsafe", '')],
+            parse_message("""<blOck>:1:1-11: error: unsafe variables in:
+  a(A):-[#inc_base];b.
+<block>:1:3-4: note: 'A' is unsafe"""))
+    test.eq([('<block>', 1, 7, 39, 'error', 'unsafe variables in:', '  sum(X):-[#inc_base];X=#sum{X:a(A)}.'),
+             ('<block>', 1, 11, 12, 'note', "'X' is unsafe", '')],
+            parse_message("""<block>:1:7-39: error: unsafe variables in:
+  sum(X):-[#inc_base];X=#sum{X:a(A)}.
+<block>:1:11-12: note: 'X' is unsafe"""))
+    test.eq([('<block>', 3, 13, 37, 'error', 'unsafe variables in:', '  output(A,B):-[#inc_base];input.'),
+             ('<block>', 3, 20, 21, 'note', "'A' is unsafe", ''),
+             ('<block>', 3, 23, 24, 'note', "'B' is unsafe", '')],
+            parse_message("""<block>:3:13-37: error: unsafe variables in:
+  output(A,B):-[#inc_base];input.
+<block>:3:20-21: note: 'A' is unsafe
+<block>:3:23-24: note: 'B' is unsafe"""))
 
 
 def ground_exc(program, label=None, arguments=[], parts=(('base',()),), observer=None, context=None):
@@ -159,34 +196,24 @@ def ground_exc(program, label=None, arguments=[], parts=(('base',()),), observer
 
     def warn2raise(code, msg):
         """ Clingo calls this, but can't handle exceptions well, so we wrap everything. """
-        name = repr(label) if label else "ASP code"
         try:
-            file, line, start, end, msg, more = parse_block(msg)
+            messages = parse_message(msg)
+            file, line, start, end, key, msg, more = messages[0]
             if file == '<block>':
+                name = repr(label) if label else "ASP code"
                 srclines = lines
             else:
                 name = file
                 srclines = [l.removesuffix('\n') for l in open(file).readlines()]
-            snippet = srclines[max(0, line-5):line]
-
-            def add_arrow(start, end):
-                snippet.append(' ' * (start-1) + '^' * (end-start))
-
-            add_arrow(start, end)
-
-            if '<block>:' in more:
-                *code, block = more.splitlines()
-                snippet.extend(code)
-                file, _, start, end, msg2, __ = parse_block(block)
-                add_arrow(start+2, end+2)
-                snippet.append(' '*start + msg2)
-            elif more:
-                msg += ':' + more.replace('\n', '')
-
-            errors.append(SyntaxError(f"in {name}: {msg}\n{'\n'.join(snippet)}"))
+            srclines = [f"{n:3} {line}" for n, line in enumerate(srclines, 1)]
+            for _, line, start, end, _, m, r in reversed(messages):
+                srclines.insert(line, f"    {' ' * (start-1)}{'^' * (end-start)} {m}{r}")
+            snippet = srclines[line-10:line+10]
+            errors.append(SyntaxError(f"in {name}, line {line}:\n{'\n'.join(snippet)}"))
         except BaseException as e:
             """ unexpected exception in the code above """
-            errors.append(e)
+            traceback.print_exc()
+            exit(-1)
 
     control = clingo.Control(arguments, logger=warn2raise, message_limit=1)
     if observer:
@@ -251,10 +278,6 @@ def run_asp_tests(*files):
             print(f"ASPUNIT: {name}: ", end='', flush=True)
             print(f" {len(asserts)} asserts,  {models} model{'s' if models>1 else ''}")
 
-
-
-import selftest
-test = selftest.get_tester(__name__)
 
 
 @test
@@ -408,9 +431,9 @@ this_is_a_fact(3)  """):
 
 @test
 def ground_exc_with_label():
-    with test.raises(SyntaxError, """in 'my code': syntax error, unexpected <IDENTIFIER>
-an error
-   ^^^^^"""):
+    with test.raises(SyntaxError, """in 'my code', line 1:
+  1 an error
+       ^^^^^ syntax error, unexpected <IDENTIFIER>"""):
         ground_exc("an error", label='my code')
 
 
@@ -421,9 +444,9 @@ def exception_in_included_file(tmp_path):
     old = os.environ.get('CLINGOPATH')
     try:
         os.environ['CLINGOPATH'] = tmp_path.as_posix()
-        with test.raises(SyntaxError, f"""in {f.as_posix()}: syntax error, unexpected EOF
-error
-^"""):
+        with test.raises(SyntaxError, f"""in {f.as_posix()}, line 2:
+  1 error
+    ^ syntax error, unexpected EOF"""):
             ground_exc("""#include "error.lp".""", label='main.lp')
     finally:
         if old:
@@ -463,52 +486,39 @@ def ground_and_solve_basics():
 
 @test
 def parse_warning_raise_error(stderr):
-    with test.raises(SyntaxError, "in 'code_a': syntax error, unexpected EOF\nabc\n^"):
+    with test.raises(SyntaxError, "in 'code_a', line 2:\n  1 abc\n    ^ syntax error, unexpected EOF"):
         ground_and_solve(["abc"], label='code_a')
-    with test.raises(SyntaxError, "in ASP code: atom does not occur in any rule head:  b\na :- b.\n     ^"):
+    with test.raises(SyntaxError, "in ASP code, line 1:\n  1 a :- b.\n         ^ atom does not occur in any rule head:  b"):
         ground_and_solve(["a :- b."])
-    with test.raises(SyntaxError, 'in ASP code: operation undefined:  ("a"/2)\na("a"/2).\n  ^^^^^'):
+    with test.raises(SyntaxError, 'in ASP code, line 1:\n  1 a("a"/2).\n      ^^^^^ operation undefined:  ("a"/2)'):
         ground_and_solve(['a("a"/2).'])
 
-    with test.raises(SyntaxError, """in 'code b': unsafe variables in
-a(A) :- b.
-^^^^^^^^^^
+    with test.raises(SyntaxError, """in 'code b', line 1:
+  1 a(A)  :-  b.
+    ^^^^^^^^^^^^ unsafe variables in:  a(A):-[#inc_base];b.
+      ^ 'A' is unsafe"""):
+        ground_and_solve(['a(A)  :-  b.'], label='code b')
 
-  a(A):-[#inc_base];b.
-    ^
-   'A' is unsafe"""):
-        ground_and_solve(['a(A) :- b.'], label='code b')
-
-    with test.raises(SyntaxError, """in ASP code: global variable in tuple of aggregate element:  X
-a(1). sum(X) :- X = #sum { X : a(A) }.
-                           ^"""):
+    with test.raises(SyntaxError, """in ASP code, line 1:
+  1 a(1). sum(X) :- X = #sum { X : a(A) }.
+                               ^ global variable in tuple of aggregate element:  X"""):
         ground_and_solve(['a(1). sum(X) :- X = #sum { X : a(A) }.'])
 
 
-#  TODO:
-"""
-SyntaxError: in ASP code: unsafe variables in
-output(T, R, rijweg_vrij)  :-
-    rijweg(R),
-    time(T),
-    input(T, R, rijweg_ingesteld).   <<<<<<<<<< . niet hier!
-    input(T, R, bgz).
-    ^^^^^^^^^^^^^^^^^
+@test
+def unsafe_variables():
+    with test.raises(SyntaxError, """in ASP code, line 3:
+  1 
+  2             input.
+  3             output(A, B)  :-  input.
+                ^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  output(A,B):-[#inc_base];input.
+                       ^ 'A' is unsafe
+                          ^ 'B' is unsafe
+  4             % comment"""):
+        ground_exc("""
+            input.
+            output(A, B)  :-  input.
+            % comment""")
 
-  input(T,R,bgz):-[#inc_base].
-<block>:28:14-15: note: 'R' is unsafe
-            ^
-           'T' is unsafe
-"""
-
-"""
-SyntaxError: in ASP code: syntax error, unexpected:, expecting .
-                                               ^
-
-Kwam van:
-MessageCode.RuntimeError ./interlocking/general/normaal_voorwaarde_h.lp:50:48-49: error: syntax error, unexpected :, expecting .
-Er stond: #program test_rijweg_vrij(rijweg_170_182, base):
-(: aan het einde, moet . zijn)
-"""
 
 # more tests in __init__ to avoid circular imports
