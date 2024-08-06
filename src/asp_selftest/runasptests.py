@@ -22,7 +22,6 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
-
 def parse_signature(s):
     """
     Parse extended #program syntax using Python's parser.
@@ -122,9 +121,11 @@ class Tester:
 
     def report(self):
         """ When done, check assert(@models(n)) explicitly, then report. """
-        assert self._models_ist == self._models_soll, f"Expected {self._models_soll} models, found {self._models_ist}."
-        assert not self._anys, f"Asserts not in any model:\n{'\n'.join(str(a) for a in self._anys)}"
-        return dict(asserts={str(a) for a in self._asserts}, models=self._models_ist)
+        models = self._models_ist
+        assert models > 0, "No models found."
+        assert not self._anys, f"Asserts not in any of the {models} models:\n{'\n'.join(str(a) for a in self._anys)}"
+        assert models == self._models_soll, f"Expected {self._models_soll} models, found {models}."
+        return dict(asserts={str(a) for a in self._asserts}, models=models)
 
 
     def add_function(self, func):
@@ -153,9 +154,13 @@ def read_programs(asp_code):
 
 
 def parse_message(msg):
-    return [(file, int(line), int(start), int(end), key, msg, more) 
-            for file, line, start, end, key, msg, more
-            in re.findall(r"(?m)^(.+?):(\d+):(\d+)-(\d+):\s(.+?):\s([^\n]+)(?:\n(\s\s.+))?", msg)]
+    return [(file,
+             int(end_line_or_col if opt_end_col else start_line),
+             int(start_col),
+             int(opt_end_col if opt_end_col else end_line_or_col),
+             key, msg, more) 
+            for file, start_line, start_col, end_line_or_col, opt_end_col, key, msg, more
+            in re.findall(r"(?m)^(.+?):(\d+):(\d+)-(\d+)(?::(\d+))?:\s(.+?):\s([^\n]+)(?:\n(\s\s.+))?", msg)]
 
 
 @test
@@ -187,6 +192,16 @@ def parse_clingo_error_messages():
   output(A,B):-[#inc_base];input.
 <block>:3:20-21: note: 'A' is unsafe
 <block>:3:23-24: note: 'B' is unsafe"""))
+    test.eq([('<block>', 3, 13, 43, 'error', 'unsafe variables in:', '  geel(R):-[#inc_base];iets_vrij(S);(S,T,N)=R;R=(S,T,N).'),
+             ('<block>', 3, 40, 41, 'note', "'N' is unsafe", ''),
+             ('<block>', 2, 18, 19, 'note', "'R' is unsafe", ''),
+             ('<block>', 3, 37, 38, 'note', "'T' is unsafe", '')
+             ],
+            parse_message("""<block>:2:13-3:43: error: unsafe variables in:
+  geel(R):-[#inc_base];iets_vrij(S);(S,T,N)=R;R=(S,T,N).
+<block>:3:40-41: note: 'N' is unsafe
+<block>:2:18-19: note: 'R' is unsafe
+<block>:3:37-38: note: 'T' is unsafe"""), diff=test.diff)
 
 
 def ground_exc(program, label=None, arguments=[], parts=(('base',()),), observer=None, context=None):
@@ -206,9 +221,14 @@ def ground_exc(program, label=None, arguments=[], parts=(('base',()),), observer
                 name = file
                 srclines = [l.removesuffix('\n') for l in open(file).readlines()]
             srclines = [f"{n:3} {line}" for n, line in enumerate(srclines, 1)]
-            for _, line, start, end, _, m, r in reversed(messages):
-                srclines.insert(line, f"    {' ' * (start-1)}{'^' * (end-start)} {m}{r}")
-            snippet = srclines[line-10:line+10]
+            msg_fmt = lambda: f"    {' ' * (start-1)}{'^' * (end-start)} {m}{r}"
+            offset = 0
+            for _, line, start, end, _, m, r in sorted(messages[1:]):
+                srclines.insert(line + offset, msg_fmt())
+                offset += 1 
+            _, line, start, end, _, m, r = messages[0]
+            srclines.insert(line + len(messages) -1, msg_fmt())
+            snippet = srclines[max(0,line-10):line+10]  # TODO testme
             errors.append(SyntaxError(f"in {name}, line {line}:\n{'\n'.join(snippet)}"))
         except BaseException as e:
             """ unexpected exception in the code above """
@@ -228,6 +248,9 @@ def ground_exc(program, label=None, arguments=[], parts=(('base',()),), observer
             raise
     if errors:
         raise errors[0]
+    for ensure in control.symbolic_atoms.by_signature('ensure',1):
+        fact = ensure.symbol.arguments[0]
+        assert fact in control.symbolic_atoms, f"failed: {fact}"
     return control
 
 
@@ -257,10 +280,10 @@ def run_tests(lines, programs):
             to_ground = list(prog_with_dependencies(prog_name, dependencies))
             try:
                 ground_and_solve(lines, parts=to_ground, observer=tester, context=tester, on_model=tester.on_model)
+                yield prog_name, tester.report()
             except Exception as e:
-                e.add_note(f"Error while running {prog_name}.")
+                e.add_note(f"Error while running:  {prog_name}.")
                 raise e from None
-            yield prog_name, tester.report()
 
 
 def parse_and_run_tests(asp_code):
@@ -495,8 +518,8 @@ def parse_warning_raise_error(stderr):
 
     with test.raises(SyntaxError, """in 'code b', line 1:
   1 a(A)  :-  b.
-    ^^^^^^^^^^^^ unsafe variables in:  a(A):-[#inc_base];b.
-      ^ 'A' is unsafe"""):
+      ^ 'A' is unsafe
+    ^^^^^^^^^^^^ unsafe variables in:  a(A):-[#inc_base];b."""):
         ground_and_solve(['a(A)  :-  b.'], label='code b')
 
     with test.raises(SyntaxError, """in ASP code, line 1:
@@ -511,9 +534,9 @@ def unsafe_variables():
   1 
   2             input.
   3             output(A, B)  :-  input.
-                ^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  output(A,B):-[#inc_base];input.
                        ^ 'A' is unsafe
                           ^ 'B' is unsafe
+                ^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  output(A,B):-[#inc_base];input.
   4             % comment"""):
         ground_exc("""
             input.
@@ -521,4 +544,27 @@ def unsafe_variables():
             % comment""")
 
 
+@test
+def multiline_error():
+    with test.raises(SyntaxError, """in ASP code, line 3:
+  1 
+  2             geel(R)  :-
+                     ^ 'R' is unsafe
+  3                 iets_vrij(S), R=(S, T, N).
+                                        ^ 'T' is unsafe
+                                           ^ 'N' is unsafe
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  geel(R):-[#inc_base];iets_vrij(S);(S,T,N)=R;R=(S,T,N).
+  4             %%%%"""):
+        ground_exc("""
+            geel(R)  :-
+                iets_vrij(S), R=(S, T, N).
+            %%%%""")
+
+
+
+@test
+def allow_assert_in_ground():
+    with test.raises(AssertionError, "failed: assert(a)"):
+        ground_exc("a(2).  assert(a) : a(N),  N < 2.  ensure(assert(a)).")
+    ground_exc("a(1).  assert(a) : a(N),  N < 2.  ensure(assert(a)).")
 # more tests in __init__ to avoid circular imports
