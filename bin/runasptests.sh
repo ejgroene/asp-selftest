@@ -3,14 +3,11 @@
 # Implicitly run the Python tests of asp-tests.
 #
 for fname in `find . -name "*.lp"`; do
-    pushd `dirname ${fname}` > /dev/null
-    asp-tests `basename ${fname}` --silent
+    asp-tests ${fname} --silent
     error=$?
     if [ $error -ne 0 ]; then
-        echo "$(tput bold)An error occurred during asp-test$(tput sgr0). Quiting."
-        popd > /dev/null
+        echo '\[$(tput bold)\]An error occurred during asp-test\[$(tput sgr0)\]. Quiting.'
         exit $error
     fi
-    popd > /dev/null
 done
 
