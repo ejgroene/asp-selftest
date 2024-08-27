@@ -62,7 +62,7 @@ def format_symbols(symbols):
     symbols = sorted(str(s) for s in symbols)
     if len(symbols) > 0:
         col_width = (max(len(w) for w in symbols)) + 2
-        width, h = shutil.get_terminal_size((80, 20))
+        width, h = shutil.get_terminal_size((120, 20))
         cols = width // col_width
         modelstr = '\n'.join(
                 ''.join(s.ljust(col_width) for s in b)
@@ -204,7 +204,8 @@ def parse_clingo_error_messages():
 <block>:3:37-38: note: 'T' is unsafe"""), diff=test.diff)
 
 
-def ground_exc(program, label=None, arguments=[], parts=(('base',()),), observer=None, context=None):
+def ground_exc(program, label=None, arguments=[], parts=(('base',()),),
+               observer=None, context=None, extra_src=None):
     """ grounds an aps program turning messages/warnings into SyntaxErrors """
     lines = program.splitlines() if isinstance(program, str) else program
     errors = []
@@ -229,6 +230,8 @@ def ground_exc(program, label=None, arguments=[], parts=(('base',()),), observer
             _, line, start, end, _, m, r = messages[0]
             srclines.insert(line + len(messages) -1, msg_fmt())
             snippet = srclines[max(0,line-10):line+10]  # TODO testme
+            if "file could not be opened" in m:
+                snippet.append(f"CLINGOPATH={os.environ['CLINGOPATH']}")
             errors.append(SyntaxError(f"in {name}, line {line}:\n{'\n'.join(snippet)}"))
         except BaseException as e:
             """ unexpected exception in the code above """
@@ -240,7 +243,9 @@ def ground_exc(program, label=None, arguments=[], parts=(('base',()),), observer
         control.register_observer(observer)
     try:
         control.add('\n'.join(lines))
-        control.ground(parts, context=context)
+        if extra_src:
+            control.add(extra_src)
+        control.ground(parts, context=context(control) if context else None)
     except BaseException as e:
         if errors:
             raise errors[0].with_traceback(None) from None
@@ -279,7 +284,7 @@ def run_tests(lines, programs):
 
             to_ground = list(prog_with_dependencies(prog_name, dependencies))
             try:
-                ground_and_solve(lines, parts=to_ground, observer=tester, context=tester, on_model=tester.on_model)
+                ground_and_solve(lines, parts=to_ground, observer=tester, context=lambda _: tester, on_model=tester.on_model)
                 yield prog_name, tester.report()
             except Exception as e:
                 e.add_note(f"Error while running:  {prog_name}.")
@@ -492,6 +497,9 @@ def ground_and_solve_basics():
     test.eq((True,), O.a)
 
     class C:
+        @classmethod
+        def __init__(clz, control):
+            pass
         @classmethod
         def goal(self, *a):
             self.a = a
