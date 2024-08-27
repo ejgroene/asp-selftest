@@ -3,6 +3,7 @@
 
 import selftest
 import argparse
+import io
 from .arguments import parse, parse_silent
 
 
@@ -24,9 +25,14 @@ test = selftest.get_tester(__name__)
 
 
 @test
-def check_arguments():
-    args = parse(['filename.lp', 'morehere.lp'])
-    test.eq(['filename.lp', 'morehere.lp'], args.lpfile)
+def check_arguments(tmp_path):
+    f = tmp_path/'filename.lp'
+    m = tmp_path/'morehere.lp'
+    f.write_bytes(b'')
+    m.write_bytes(b'')
+    args = parse([f.as_posix(), m.as_posix()])
+    test.isinstance(args.lpfile[0], io.TextIOBase)
+    test.isinstance(args.lpfile[1], io.TextIOBase)
     test.not_(args.silent)
     test.not_(args.full_trace)
 
@@ -35,15 +41,15 @@ def check_arguments():
 def check_usage_message():
     with test.stderr as s:
         with test.raises(SystemExit):
-            parse([])
-    test.eq("""usage: asp-selftest [-h] [--silent] [--full-trace] lpfile [lpfile ...]
-asp-selftest: error: the following arguments are required: lpfile
+            parse(['-niks'])
+    test.eq("""usage: asp-selftest [-h] [--silent] [--full-trace] [lpfile ...]
+asp-selftest: error: unrecognized arguments: -niks
 """, s.getvalue(), diff=test.diff)
 
 
 @test
 def check_flags():
-    args = parse(['required.lp', '--silent', '--full-trace'])
+    args = parse(['--silent', '--full-trace'])
     test.truth(args.silent)
     test.truth(args.full_trace)
 
