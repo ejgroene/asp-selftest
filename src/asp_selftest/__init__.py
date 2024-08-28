@@ -42,9 +42,10 @@ def check_usage_message():
     with test.stderr as s:
         with test.raises(SystemExit):
             parse(['-niks'])
-    test.eq("""usage: asp-selftest [-h] [--silent] [--full-trace] [lpfile ...]
-asp-selftest: error: unrecognized arguments: -niks
-""", s.getvalue(), diff=test.diff)
+    test.eq("usage: asp-selftest [-h] [--silent] [--programs [PROGRAMS ...]] "
+            "[--full-trace] [lpfile ...] "
+            "asp-selftest: error: unrecognized arguments: -niks",
+            ' '.join(s.getvalue().split()), diff=test.diff) # split/join to remove formatting spaces
 
 
 @test

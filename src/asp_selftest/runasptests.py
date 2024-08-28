@@ -231,7 +231,7 @@ def ground_exc(program, label=None, arguments=[], parts=(('base',()),),
             srclines.insert(line + len(messages) -1, msg_fmt())
             snippet = srclines[max(0,line-10):line+10]  # TODO testme
             if "file could not be opened" in m:
-                snippet.append(f"CLINGOPATH={os.environ['CLINGOPATH']}")
+                snippet.append(f"CLINGOPATH={os.environ.get('CLINGOPATH')}")
             errors.append(SyntaxError(f"in {name}, line {line}:\n{'\n'.join(snippet)}"))
         except BaseException as e:
             """ unexpected exception in the code above """
@@ -267,7 +267,7 @@ def ground_and_solve(lines, on_model=None, **kws):
     return control, result
 
 
-def run_tests(lines, programs):
+def run_tests(lines, programs, base_programs=()):
     for prog_name, dependencies in programs.items():
         if prog_name.startswith('test'):
             tester = local.current_tester = Tester()
@@ -283,6 +283,7 @@ def run_tests(lines, programs):
                     yield dep, [clingo.Number(a) for a in args]
 
             to_ground = list(prog_with_dependencies(prog_name, dependencies))
+            to_ground.extend((b, []) for b in base_programs)  #TODO test me
             try:
                 ground_and_solve(lines, parts=to_ground, observer=tester, context=lambda _: tester, on_model=tester.on_model)
                 yield prog_name, tester.report()
@@ -291,16 +292,16 @@ def run_tests(lines, programs):
                 raise e from None
 
 
-def parse_and_run_tests(asp_code):
+def parse_and_run_tests(asp_code, base_programs=()):
     lines, programs = read_programs(asp_code)
-    return run_tests(lines, programs)
+    return run_tests(lines, programs, base_programs)
 
 
-def run_asp_tests(*files):
+def run_asp_tests(*files, base_programs=()):
     for program_file in files:
         print(f"Reading {program_file}.", flush=True)
-        asp_code = open(program_file).read()
-        for name, result in parse_and_run_tests(asp_code):
+        asp_code = program_file.read()
+        for name, result in parse_and_run_tests(asp_code, base_programs):
             asserts = result['asserts']
             models = result['models']
             print(f"ASPUNIT: {name}: ", end='', flush=True)

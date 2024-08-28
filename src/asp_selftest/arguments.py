@@ -22,7 +22,12 @@ def parse(args=None):
             'lpfile',
             help="File containing ASP and in-source tests. Default is STDIN.",
             type=argparse.FileType(),
-            default=sys.stdin,
+            default=[sys.stdin],
+            nargs='*')
+    argparser.add_argument(
+            '--programs',
+            help="Additional programs to ground on top of 'base'.",
+            default=(),
             nargs='*')
     argparser.add_argument('--full-trace', help="Print full Python stack trace on error.", action='store_true')
     return argparser.parse_args(args)
