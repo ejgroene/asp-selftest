@@ -4,8 +4,9 @@
 import selftest
 import argparse
 import io
-from .arguments import parse, parse_silent
 
+from .processors import processor
+from .arguments import parse, parse_silent
 
 # First of all, inspect --silent flag to silence tests
 args = parse_silent()
