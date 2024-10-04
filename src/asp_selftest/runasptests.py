@@ -18,7 +18,11 @@ from clingo.script import enable_python
 enable_python()
 
 
-from .error_handling import warn2raise
+from .error_handling import warn2raise, AspSyntaxError
+
+
+def has_name(symbol, name):
+   return symbol.type == clingo.SymbolType.Function and symbol.name == name
 
 
 import selftest
@@ -96,12 +100,16 @@ class Tester:
         self._funcs = {}
 
 
+    def add_assert(self, a):
+        self._asserts.add(a)
+
+
     def all(self, *args):
         """ ASP API: add a named assert to be checked for each model """
         assrt = clingo.Function("assert", args)
         if assrt in self._asserts:
             print(f"WARNING: duplicate assert: {assrt}")
-        self._asserts.add(assrt)
+        self.add_assert(assrt)
         return args
 
 
@@ -121,7 +129,17 @@ class Tester:
 
     def on_model(self, model):
         """ Callback when model is found; count model and check all asserts. """
+        if self._models_soll == -1:
+            models = next((s for s in model.symbols(atoms=True) if has_name(s, 'models')),
+                          None)
+            if models:
+                self._models_soll = models.arguments[0].number
         self._models_ist += 1
+
+        for ensure in (s for s in model.symbols(atoms=True) if has_name(s, 'ensure')):
+            fact = ensure.arguments[0]
+            self.add_assert(fact)
+
         for a in set(self._anys):
             if model.contains(a):
                 self._anys.remove(a)
@@ -191,9 +209,6 @@ def ground_exc(program, label=None, arguments=[], parts=(('base',()),),
             raise
     if errors:
         raise errors[0]
-    for ensure in control.symbolic_atoms.by_signature('ensure',1):
-        fact = ensure.symbol.arguments[0]
-        assert fact in control.symbolic_atoms, f"failed: {fact}"
     return control
 
 
@@ -206,28 +221,32 @@ def ground_and_solve(lines, on_model=None, **kws):
 
 
 def run_tests(lines, programs, base_programs=()):
-    for prog_name, dependencies in programs.items():
-        if prog_name.startswith('test'):
+    tests = [name for name in programs if name.startswith('test')]  or  ['base']
+    for prog_name in tests:
+        dependencies = programs[prog_name]
+        def prog_with_dependencies(name, dependencies):
+            yield name, [clingo.Number(42) for _ in dependencies]
+            for dep, args in dependencies:
+                assert dep in programs, f"Dependency {dep} of {name} not found."
+                formal_args = programs.get(dep, [])
+                formal_names = list(a[0] for a in formal_args)
+                if len(args) != len(formal_names):
+                    raise Exception(f"Argument mismatch in {prog_name!r} for dependency {dep!r}. Required: {formal_names}, given: {args}.")
+                yield dep, [clingo.Number(a) for a in args]
+
+        to_ground = list(prog_with_dependencies(prog_name, dependencies))
+        to_ground.extend((b, []) for b in base_programs)  #TODO test me
+        try:
             tester = local.current_tester = Tester()
-
-            def prog_with_dependencies(name, dependencies):
-                yield name, [clingo.Number(42) for _ in dependencies]
-                for dep, args in dependencies:
-                    assert dep in programs, f"Dependency {dep} of {name} not found."
-                    formal_args = programs.get(dep, [])
-                    formal_names = list(a[0] for a in formal_args)
-                    if len(args) != len(formal_names):
-                        raise Exception(f"Argument mismatch in {prog_name!r} for dependency {dep!r}. Required: {formal_names}, given: {args}.")
-                    yield dep, [clingo.Number(a) for a in args]
-
-            to_ground = list(prog_with_dependencies(prog_name, dependencies))
-            to_ground.extend((b, []) for b in base_programs)  #TODO test me
-            try:
-                ground_and_solve(lines, parts=to_ground, observer=tester, context=lambda _: tester, on_model=tester.on_model)
-                yield prog_name, tester.report()
-            except Exception as e:
-                e.add_note(f"Error while running:  {prog_name}.")
-                raise e from None
+            control, result = ground_and_solve(lines,
+                                               parts=to_ground,
+                                               observer=tester,
+                                               context=lambda _: tester,
+                                               on_model=tester.on_model)
+            yield prog_name, tester.report()
+        except Exception as e:
+            e.add_note(f"Error while running:  {prog_name}.")
+            raise e from None
 
 
 def parse_and_run_tests(asp_code, base_programs=()):
@@ -237,7 +256,7 @@ def parse_and_run_tests(asp_code, base_programs=()):
 
 def run_asp_tests(*files, base_programs=()):
     for program_file in files:
-        print(f"Reading {program_file}.", flush=True)
+        print(f"Reading {program_file.name}.", flush=True)
         asp_code = program_file.read()
         for name, result in parse_and_run_tests(asp_code, base_programs):
             asserts = result['asserts']
@@ -398,7 +417,7 @@ this_is_a_fact(3)  """):
 
 @test
 def ground_exc_with_label():
-    with test.raises(SyntaxError, """in 'my code', line 1:
+    with test.raises(AspSyntaxError, """in 'my code', line 1:
   1 an error
        ^^^^^ syntax error, unexpected <IDENTIFIER>"""):
         ground_exc("an error", label='my code')
@@ -411,7 +430,7 @@ def exception_in_included_file(tmp_path):
     old = os.environ.get('CLINGOPATH')
     try:
         os.environ['CLINGOPATH'] = tmp_path.as_posix()
-        with test.raises(SyntaxError, f"""in {f.as_posix()}, line 2:
+        with test.raises(AspSyntaxError, f"""in {f.as_posix()}, line 2:
   1 error
     ^ syntax error, unexpected EOF"""):
             ground_exc("""#include "error.lp".""", label='main.lp')
@@ -456,20 +475,20 @@ def ground_and_solve_basics():
 
 @test
 def parse_warning_raise_error(stderr):
-    with test.raises(SyntaxError, "in 'code_a', line 2:\n  1 abc\n    ^ syntax error, unexpected EOF"):
+    with test.raises(AspSyntaxError, "in 'code_a', line 2:\n  1 abc\n    ^ syntax error, unexpected EOF"):
         ground_and_solve(["abc"], label='code_a')
-    with test.raises(SyntaxError, "in ASP code, line 1:\n  1 a :- b.\n         ^ atom does not occur in any rule head:  b"):
+    with test.raises(AspSyntaxError, "in ASP code, line 1:\n  1 a :- b.\n         ^ atom does not occur in any rule head:  b"):
         ground_and_solve(["a :- b."])
-    with test.raises(SyntaxError, 'in ASP code, line 1:\n  1 a("a"/2).\n      ^^^^^ operation undefined:  ("a"/2)'):
+    with test.raises(AspSyntaxError, 'in ASP code, line 1:\n  1 a("a"/2).\n      ^^^^^ operation undefined:  ("a"/2)'):
         ground_and_solve(['a("a"/2).'])
 
-    with test.raises(SyntaxError, """in 'code b', line 1:
+    with test.raises(AspSyntaxError, """in 'code b', line 1:
   1 a(A)  :-  b.
       ^ 'A' is unsafe
     ^^^^^^^^^^^^ unsafe variables in:  a(A):-[#inc_base];b."""):
         ground_and_solve(['a(A)  :-  b.'], label='code b')
 
-    with test.raises(SyntaxError, """in ASP code, line 1:
+    with test.raises(AspSyntaxError, """in ASP code, line 1:
   1 a(1). sum(X) :- X = #sum { X : a(A) }.
                                ^ global variable in tuple of aggregate element:  X"""):
         ground_and_solve(['a(1). sum(X) :- X = #sum { X : a(A) }.'])
@@ -477,7 +496,7 @@ def parse_warning_raise_error(stderr):
 
 @test
 def unsafe_variables():
-    with test.raises(SyntaxError, """in ASP code, line 3:
+    with test.raises(AspSyntaxError, """in ASP code, line 3:
   1 
   2             input.
   3             output(A, B)  :-  input.
@@ -493,7 +512,7 @@ def unsafe_variables():
 
 @test
 def multiline_error():
-    with test.raises(SyntaxError, """in ASP code, line 3:
+    with test.raises(AspSyntaxError, """in ASP code, line 3:
   1 
   2             geel(R)  :-
                      ^ 'R' is unsafe
@@ -510,8 +529,22 @@ def multiline_error():
 
 
 @test
-def allow_assert_in_ground():
-    with test.raises(AssertionError, "failed: assert(a)"):
-        ground_exc("a(2).  assert(a) : a(N),  N < 2.  ensure(assert(a)).")
-    ground_exc("a(1).  assert(a) : a(N),  N < 2.  ensure(assert(a)).")
+def ensure_iso_python_call():
+    t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(42).  ensure(assert("a")).')
+    try:
+        next(t)
+        test.fail("should raise")
+    except AssertionError as e:
+        test.contains(str(e), 'FAILED: assert("a")')
+    t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(2).  ensure(assert("a")).')
+    test.eq(('base', {'asserts': {'assert("a")'}, 'models': 1}), next(t))
+
+
+@test
+def alternative_models_predicate():
+    t = parse_and_run_tests("""
+        models(1).
+     """)
+    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
+
 # more tests in __init__ to avoid circular imports

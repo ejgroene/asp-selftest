@@ -1,20 +1,13 @@
-#script (python)
-processor(PrintGroundSymbols())
-processor(Reify())
-#end.
+processor("PrintGroundSymbols").
+processor("Reify").
 
-% ondersteuning nodig voor:
-% verzoek(T, D)  :-  input(T, D, F).
-% output(T, D)  :-  stuur(T, D).
-% met dit:
-% reify(verzoek, T, Device)  :-  input(T, Device, verzoek),  def_input(Device, verzoek, Bool).
-% output(T, Device, stuur)   :-  reify(stuur, T, Device),  def_output(Device, stuur, Bool).
-%
+define(179, stuur, "A", "N/A").
+output(T, Device, Function) :- reify(Function, T, Device),  define(179, Function, _, _).
 
-reify(F, Y) :- a(X),  b(F, X),  Y = X+1,  Y < 10.
+reify(Function, T, Device)  :-  define(Device, Function, _, _),  stuur(T, Device).
 
+%stuur(0, 179) :-  blah.
 
-b(a, 0).
+#external input(0, 177, stuur).
+reify(Function, T, Device) :- input(T, Device, Function).
 
-#program test_aap.
-ensure(aap).

@@ -2,46 +2,23 @@
 import sys
 import types
 import tempfile
+import importlib
+import argparse
 import clingo
 from clingo import Control, Application, clingo_main
-import importlib
 
 from clingo.script import enable_python
 enable_python()
 
 
-from error_handling import warn2raise, AspSyntaxError
+from .error_handling import warn2raise, AspSyntaxError
+from .utils import is_processor_predicate
+from .reify import Reify
 
 first_stage_processors = []
 
-def tstr(l):
-    return tuple(map(str,l))
-
 def processor(obj):
     first_stage_processors.append(obj)
-
-
-class Reify:
-    #REIFY_THEORY = "#theory reify {term {}; &reify/0: term, head}."
-
-    def ground(self, prev, ctl, parts, context=None):
-        #ctl.add(self.REIFY_THEORY)
-        prev(ctl, parts, context)
-        reified = set()
-        def get_reifies():
-            return {tstr(s.symbol.arguments) for s in ctl.symbolic_atoms if s.symbol.name == 'reify'}
-        reifies = get_reifies()
-        while reifies > reified:
-            with tempfile.NamedTemporaryFile(mode='w', prefix='reify-', suffix='.lp') as f:
-                for function, *arguments in reifies:
-                    atom = f"{function}({'.'.join(arguments)}).\n"
-                    print("REIFY:", atom)
-                    f.write(atom)
-                f.flush()
-                ctl.load(f.name)
-                prev(ctl, parts, context)
-                reified = reifies
-                reifies = get_reifies()
 
 
 class PrintGroundSymbols:
@@ -88,6 +65,7 @@ class SyntaxErrors:
 processor(SyntaxErrors())
 
 def delegate(function):
+    """ Decorator for delegating methods to processors """
     def f(self, *args, **kwargs):
         prev = types.MethodType(function, self)
         handlers = [getattr(p, function.__name__) for p in first_stage_processors if hasattr(p, function.__name__)]
@@ -101,6 +79,10 @@ def delegate(function):
 
 class MainApp(Application):
 
+    def __init__(self, programs=None):
+        self._programs = [(p, ()) for p in programs or ()]
+        Application.__init__(self)
+
     @property
     @delegate
     def message_limit(self):
@@ -108,9 +90,20 @@ class MainApp(Application):
 
     @delegate
     def main(self, ctl, files):
-        self.load(ctl, files)
-        self.ground(ctl, (('base',()),))
+        self.parse(ctl, files)
+        #self.load(ctl, files)
+        self.ground(ctl, [('base', ())] + self._programs)
         self.solve(ctl)
+
+    @delegate
+    def parse(self, ctl, files):
+        with clingo.ast.ProgramBuilder(ctl) as pb:
+            def add(ast):
+                if p := is_processor_predicate(ast):
+                    print("Adding processor:", p)
+                    first_stage_processors.append(globals()[p]())
+                pb.add(ast)
+            clingo.ast.parse_files(files, callback=add)
 
     @delegate
     def load(self, ctl, files):
@@ -142,8 +135,13 @@ class MainApp(Application):
 
 
 if __name__ == '__main__':
-    app = MainApp()
-    r =  clingo_main(app, sys.argv[1:])  # *. we want to manipulate arguments
+    """ Add --programs option + testing and ground/solve as stock Clingo as much as possible. """
+    args = argparse.ArgumentParser(add_help=False, exit_on_error=False, allow_abbrev=False)
+    args.add_argument('-p', '--programs', nargs='+', help="specify #program's to ground")
+    opts, remaining = args.parse_known_args()
+    opts.programs and print("Grounding programs:", opts.programs)
+    app = MainApp(programs=opts.programs)
+    r =  clingo_main(app, remaining)
     app.check()
 
 
