@@ -2,12 +2,35 @@ asp-selftest
 ============
 In-source test runner for Answer Set Programming (ASP) with Clingo.
 
-It provides:
+With in-source testing, source and tests stay together in the same file, hence the tests are also expressed in ASP.
 
-    * `asp-tests`: a standalone (Python) tool to run tests in a logic program.
-    * `bin/runasptests.sh`: Bash script to find all .lp files and run their tests.
+The tests are as non-obstrusive as possible and and many examples are idiomatic in nature and could have been written in another way. These idioms are merely ways to provide clearer code and avoid mistakes. As such, they have value in themselves.
 
-Both tools stop at first failure.
+
+MINIMALISTIC APPROACH
+---------------------
+Tests could be as simple as creating ordinary predicates that become true when certain conditions hold. One could name such a predicate `assert`. Imagine:
+
+    assert("output down on T=0")  :-  output(0, "X").
+
+Simple as it is, this can already be very useful when combined with `#show`:
+
+    assert("output down on T=0")  :-  output(0, "X").
+    #show assert/1.
+
+The program is compatible with normal Clingo. It will output all asserts that succeed, suitable for manual inspection. It is very useful for initial development.  Verifying the asserts is much easier because they are more to the point (more functional) than core model parameters.
+
+But what about failing asserts? One that should be true, but it isn't?  Without special measures, it will silently be absent.
+
+Signalling failures
+-------------------
+
+[runner checks for asserts]
+
+Asserting Negations
+-------------------
+
+[write sets, not 'not']
 
 
 RUNNING
