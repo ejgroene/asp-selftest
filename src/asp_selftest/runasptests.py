@@ -92,23 +92,30 @@ def format_symbols(symbols):
 
 class Tester:
 
-    def __init__(self):
-        self._asserts = set()
+    def __init__(self, name):
+        self._name = name
+        self._asserts = {}
         self._anys = set()
         self._models_ist = 0
         self._models_soll = -1
         self._funcs = {}
+        self._current_rule = None
 
 
     def add_assert(self, a):
-        self._asserts.add(a)
+        self._asserts[a] = self._current_rule
 
 
     def all(self, *args):
         """ ASP API: add a named assert to be checked for each model """
-        assrt = clingo.Function("assert", args)
-        if assrt in self._asserts:
-            print(f"WARNING: duplicate assert: {assrt}")
+        if len(args) > 1:
+            args = clingo.Function('', args)
+        else:
+            args = args[0]
+        assrt = clingo.Function("assert", (args,))
+        if rule := self._asserts.get(assrt):
+            if rule != self._current_rule:
+                print(f"WARNING: duplicate assert: {assrt}")
         self.add_assert(assrt)
         return args
 
@@ -154,7 +161,7 @@ class Tester:
     def report(self):
         """ When done, check assert(@models(n)) explicitly, then report. """
         models = self._models_ist
-        assert models > 0, "No models found."
+        assert models > 0, f"{self._name}: no models found."
         assert not self._anys, f"Asserts not in any of the {models} models:{CR}{CR.join(str(a) for a in self._anys)}"
         assert models == self._models_soll, f"Expected {self._models_soll} models, found {models}."
         return dict(asserts={str(a) for a in self._asserts}, models=models)
@@ -163,10 +170,18 @@ class Tester:
     def add_function(self, func):
         self._funcs[func.__name__] = func
 
-    
+   
+    def rule(self, choice, heads, body):
+        """ Observer callback """
+        self._current_rule = choice, heads, body
+
+
     def __getattr__(self, name):
         if name in self._funcs:
             return self._funcs[name]
+        #def f(*a, **k):
+        #    print(f"{name}({a}, {k})")
+        #return f
         raise AttributeError(name)
 
 
@@ -237,7 +252,7 @@ def run_tests(lines, programs, base_programs=()):
         to_ground = list(prog_with_dependencies(prog_name, dependencies))
         to_ground.extend((b, []) for b in base_programs)  #TODO test me
         try:
-            tester = local.current_tester = Tester()
+            tester = local.current_tester = Tester(prog_name)
             control, result = ground_and_solve(lines,
                                                parts=to_ground,
                                                observer=tester,
@@ -546,5 +561,33 @@ def alternative_models_predicate():
         models(1).
      """)
     test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
+
+
+@test
+def warning_about_duplicate_assert():
+    t = parse_and_run_tests("""
+        #program test_one.
+        a(1; 2).
+        assert(@all("A"))  :-  a(1).
+        assert(@all("A"))  :-  a(2).
+        assert(@models(1)).
+     """)
+    with test.stdout as o:
+        next(t)
+    test.contains(o.getvalue(), 'WARNING: duplicate assert: assert("A")')
+
+
+@test
+def NO_warning_about_duplicate_assert():
+    t = parse_and_run_tests("""
+        #program test_one.
+        a(1; 2).
+        assert(@all("A"))  :-  { a(N) } = 2.
+        assert(@models(1)).
+     """)
+    with test.stdout as o:
+        next(t)
+    test.complement.contains(o.getvalue(), 'WARNING: duplicate assert: assert("A")')
+
 
 # more tests in __init__ to avoid circular imports
