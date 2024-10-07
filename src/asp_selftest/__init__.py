@@ -5,8 +5,8 @@ import selftest
 import argparse
 import io
 
-from .processors import processor
 from .arguments import parse, parse_silent
+
 
 # First of all, inspect --silent flag to silence tests
 args = parse_silent()
@@ -19,10 +19,13 @@ if args.silent:
         selftest.basic_config(run=False)
     except AssertionError:
         root = selftest.get_tester(None)
-        assert not root.option_get('run'), "Tester must have been configured to NOT run tests."
+        CR = '\n'
+        assert not root.option_get('run'), "In order for --silent to work, " \
+            f"Tester {root}{CR} must have been configured to NOT run tests."
 
 
 test = selftest.get_tester(__name__)
+from .processors import processor
 
 
 @test
