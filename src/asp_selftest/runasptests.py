@@ -90,6 +90,14 @@ def format_symbols(symbols):
     return modelstr
 
 
+def create_assert(*args):
+    if len(args) > 1:
+        args = clingo.Function('', args)
+    else:
+        args = args[0]
+    return args, clingo.Function("assert", (args,))
+
+
 class Tester:
 
     def __init__(self, name):
@@ -108,11 +116,7 @@ class Tester:
 
     def all(self, *args):
         """ ASP API: add a named assert to be checked for each model """
-        if len(args) > 1:
-            args = clingo.Function('', args)
-        else:
-            args = args[0]
-        assrt = clingo.Function("assert", (args,))
+        args, assrt = create_assert(*args)
         if rule := self._asserts.get(assrt):
             if rule != self._current_rule:
                 print(f"WARNING: duplicate assert: {assrt}")
@@ -121,7 +125,7 @@ class Tester:
 
 
     def any(self, *args):
-        assrt = clingo.Function("assert", args)
+        args, assrt = create_assert(*args)
         if assrt in self._anys:
             print(f"WARNING: duplicate assert: {assrt}")
         self._anys.add(assrt)
