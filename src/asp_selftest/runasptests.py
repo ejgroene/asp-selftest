@@ -165,6 +165,8 @@ class Tester:
     def report(self):
         """ When done, check assert(@models(n)) explicitly, then report. """
         models = self._models_ist
+        if not self._asserts:
+            return {'asserts': set(), 'models': models}
         assert models > 0, f"{self._name}: no models found."
         assert not self._anys, f"Asserts not in any of the {models} models:{CR}{CR.join(str(a) for a in self._anys)}"
         assert models == self._models_soll, f"Expected {self._models_soll} models, found {models}."
@@ -562,9 +564,11 @@ def ensure_iso_python_call():
 @test
 def alternative_models_predicate():
     t = parse_and_run_tests("""
+        assert(1).
+        ensure(assert(1)).
         models(1).
      """)
-    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
+    test.eq(('base', {'asserts': {'assert(1)'}, 'models': 1}), next(t))
 
 
 @test
@@ -592,6 +596,11 @@ def NO_warning_about_duplicate_assert():
     with test.stdout as o:
         next(t)
     test.complement.contains(o.getvalue(), 'WARNING: duplicate assert: assert("A")')
+
+@test
+def do_not_report_on_base_without_any_asserts():
+    t = parse_and_run_tests("some. stuff.")
+    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
 
 
 # more tests in __init__ to avoid circular imports
