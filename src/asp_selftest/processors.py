@@ -80,6 +80,7 @@ def delegate(function):
 class MainApp(Application):
 
     def __init__(self, programs=None):
+        self.program_name = "clingo+tests"
         self._programs = [(p, ()) for p in programs or ()]
         Application.__init__(self)
 
@@ -134,9 +135,14 @@ class MainApp(Application):
         pass
 
 
-if __name__ == '__main__':
+def main():
     """ Add --programs option + testing and ground/solve as stock Clingo as much as possible. """
-    args = argparse.ArgumentParser(add_help=False, exit_on_error=False, allow_abbrev=False)
+    from .arguments import silent
+    args = argparse.ArgumentParser(
+            parents = [silent],
+            add_help = False,
+            exit_on_error = False,
+            allow_abbrev = False)
     args.add_argument('-p', '--programs', nargs='+', help="specify #program's to ground")
     opts, remaining = args.parse_known_args()
     opts.programs and print("Grounding programs:", opts.programs)
@@ -145,3 +151,5 @@ if __name__ == '__main__':
     app.check()
 
 
+if __name__ == '__main__':
+    main()

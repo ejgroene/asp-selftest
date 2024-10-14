@@ -2,7 +2,7 @@
 """ Runs all tests in an ASP program. """
 
 
-# this function is directly executed by the pip installed code wrapper
+# this function is directly executed by the pip installed code wrapper, see pyproject.toml
 def main():
     import sys
     from .arguments import parse
@@ -14,6 +14,12 @@ def main():
         sys.tracebacklimit = 0
 
     run_asp_tests(*args.lpfile, base_programs=args.programs)
+
+
+# this function is directly executed by pip installed code wrapper, see pyproject.toml
+def clingo_plus_tests():
+    from .processors import main
+    main()
 
 
 # this allows the code to also be run with python -m

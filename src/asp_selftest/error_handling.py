@@ -1,5 +1,6 @@
 import traceback
 import re
+import os
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -8,7 +9,7 @@ test = selftest.get_tester(__name__)
 CR = '\n' # trick to support old python versions that do not accecpt \ in f-strings
 
 
-class AspSyntaxError(Exception):
+class AspSyntaxError(SyntaxError):
     pass
 
 
