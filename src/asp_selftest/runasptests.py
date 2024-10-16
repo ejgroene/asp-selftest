@@ -11,6 +11,10 @@ import threading
 import shutil
 import itertools
 import traceback
+import importlib
+
+
+from clingo import Function, Number
 
 
 # Allow ASP programs started in Python to include Python themselves.
@@ -38,6 +42,17 @@ def batched(iterable, n):
     iterator = iter(iterable)
     while batch := tuple(itertools.islice(iterator, n)):
         yield batch
+
+@test
+def batch_it():
+    test.eq([], list(batched([], 1)))
+    test.eq([(1,)], list(batched([1], 1)))
+    test.eq([(1,),(2,)], list(batched([1,2], 1)))
+    test.eq([(1,)], list(batched([1], 2)))
+    test.eq([(1,2)], list(batched([1,2], 2)))
+    test.eq([(1,2), (3,)], list(batched([1,2,3], 2)))
+    with test.raises(ValueError, 'n must be at least one'):
+        list(batched([], 0))
 
 
 def parse_signature(s):
@@ -96,6 +111,14 @@ def create_assert(*args):
     else:
         args = args[0]
     return args, clingo.Function("assert", (args,))
+
+
+@test
+def create_some_asserts():
+    test.eq((Number(3), Function('assert', [Number(3)])),
+            create_assert(Number(3)))
+    test.eq((Function('', [Number(4), Number(2)]), Function('assert', [Function('', [Number(4), Number(2)])])),
+            create_assert(Number(4), Number(2)))
 
 
 class Tester:
@@ -207,7 +230,8 @@ def read_programs(asp_code):
 
 
 def ground_exc(program, label=None, arguments=[], parts=(('base',()),),
-               observer=None, context=None, extra_src=None):
+               observer=None, context=None, extra_src=None,
+               hooks=()):
     """ grounds an aps program turning messages/warnings into SyntaxErrors """
     lines = program.splitlines() if isinstance(program, str) else program
     errors = []
@@ -222,6 +246,8 @@ def ground_exc(program, label=None, arguments=[], parts=(('base',()),),
         control.add('\n'.join(lines))
         if extra_src:
             control.add(extra_src)
+        for h in hooks:
+            h(control)
         control.ground(parts, context=context(control) if context else None)
     except BaseException as e:
         if errors:
@@ -241,7 +267,7 @@ def ground_and_solve(lines, on_model=None, **kws):
     return control, result
 
 
-def run_tests(lines, programs, base_programs=()):
+def run_tests(lines, programs, base_programs=(), hooks=()):
     tests = [name for name in programs if name.startswith('test')]  or  ['base']
     for prog_name in tests:
         dependencies = programs[prog_name]
@@ -263,23 +289,29 @@ def run_tests(lines, programs, base_programs=()):
                                                parts=to_ground,
                                                observer=tester,
                                                context=lambda _: tester,
-                                               on_model=tester.on_model)
+                                               on_model=tester.on_model,
+                                               hooks=hooks)
             yield prog_name, tester.report()
         except Exception as e:
             e.add_note(f"Error while running:  {prog_name}.")
             raise e from None
 
 
-def parse_and_run_tests(asp_code, base_programs=()):
+def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
+    def lookup_hook(h):
+        module_name, callable_name = h.split(':')
+        module = importlib.import_module(module_name)
+        return getattr(module, callable_name)
     lines, programs = read_programs(asp_code)
-    return run_tests(lines, programs, base_programs)
+    return run_tests(lines, programs, base_programs, hooks=[lookup_hook(h) for h in hooks])
 
 
-def run_asp_tests(*files, base_programs=()):
+def run_asp_tests(*files, base_programs=(), hooks=()):
     for program_file in files:
-        print(f"Reading {program_file.name}.", flush=True)
+        name = getattr(program_file, 'name', str(program_file))
+        print(f"Reading {name}.", flush=True)
         asp_code = program_file.read()
-        for name, result in parse_and_run_tests(asp_code, base_programs):
+        for name, result in parse_and_run_tests(asp_code, base_programs, hooks=hooks):
             asserts = result['asserts']
             models = result['models']
             print(f"ASPUNIT: {name}: ", end='', flush=True)
