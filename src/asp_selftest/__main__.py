@@ -8,12 +8,10 @@
 """
 
 import sys
+
+
 from .arguments import parse
 from .runasptests import run_asp_tests
-
-
-import selftest
-test = selftest.get_tester(__name__)
 
 
 # this function is directly executed by the pip installed code wrapper, see pyproject.toml
@@ -31,6 +29,10 @@ def clingo_plus_tests():
     main()
 
 
+import selftest
+test = selftest.get_tester(__name__)
+
+
 @test
 def main_entry_point_basics(stdin, stdout, argv):
     stdin.write("a.")
@@ -44,7 +46,7 @@ def main_entry_point_basics(stdin, stdout, argv):
 @test
 def main_entry_processing_hook(stdin, stdout, argv):
     argv += ['--processor', 'asp_selftest:test_hook']  # test_hook is in __init__.py
-    stdin.write("a.")
+    stdin.write("a.\n")
     stdin.seek(0)
     main()
     response = stdout.getvalue()

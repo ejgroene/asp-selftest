@@ -14,3 +14,8 @@ def test_hook(control):
         assert(@all(test_hook_was_here)).
         assert(@models(1)).
         """)
+
+
+# reexport/publish some stuff
+from .runasptests import ground_exc
+
