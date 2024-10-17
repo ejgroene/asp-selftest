@@ -53,3 +53,24 @@ def main_entry_processing_hook(stdin, stdout, argv):
     test.startswith(response, 'Reading <_io.StringIO')
     test.endswith(response, 'ASPUNIT: base:  2 asserts,  1 model\n')
 
+
+@test
+def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
+    f = tmp_path/'f.lp'
+    f.write_text('a.\n')
+    argv += [f.as_posix()]
+    clingo_plus_tests()
+    s = stdout.getvalue().splitlines()
+    test.eq('clingo+tests version 5.7.1', s[0])
+    test.startswith(s[1], 'Reading from')
+    test.endswith(s[1], 'f.lp')
+    test.eq('Solving...', s[2])
+    test.eq('Answer: 1', s[3])
+    test.eq('a', s[4])
+    test.eq('SATISFIABLE', s[5])
+    test.eq('', s[6])
+    test.eq('Models       : 1+', s[7])
+    test.eq('Calls        : 1', s[8])
+    test.eq('Time         : 0.000s (Solving: 0.00s 1st Model: 0.00s Unsat: 0.00s)', s[9])
+    test.eq('CPU Time     : 0.000s', s[10])
+

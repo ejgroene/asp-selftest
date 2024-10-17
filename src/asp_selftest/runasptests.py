@@ -470,10 +470,12 @@ this_is_a_fact(3)  """):
 
 @test
 def ground_exc_with_label():
-    with test.raises(AspSyntaxError, """in 'my code', line 1:
-  1 an error
-       ^^^^^ syntax error, unexpected <IDENTIFIER>"""):
-        ground_exc("an error", label='my code')
+    with test.raises(AspSyntaxError, "syntax error, unexpected <IDENTIFIER>") as e:
+        ground_exc("a.\nan error", label='my code')
+    test.eq("""    1 a.
+    2 an error
+         ^^^^^ syntax error, unexpected <IDENTIFIER>""", e.exception.text)
+        
 
 
 @test
@@ -483,12 +485,13 @@ def exception_in_included_file(tmp_path):
     old = os.environ.get('CLINGOPATH')
     try:
         os.environ['CLINGOPATH'] = tmp_path.as_posix()
-        with test.raises(AspSyntaxError, f"""in {f.as_posix()}, line 2:
-  1 error
-    ^ syntax error, unexpected EOF"""):
+        with test.raises(AspSyntaxError, 'syntax error, unexpected EOF') as e:
             ground_exc("""#include "error.lp".""", label='main.lp')
+        test.eq(f.as_posix(), e.exception.filename)
+        test.eq(2, e.exception.lineno)
+        test.eq('    1 error\n      ^ syntax error, unexpected EOF', e.exception.text)
     finally:
-        if old:
+        if old:  #pragma no cover
             os.environ['CLINGOPATH'] = old
 
 
@@ -528,56 +531,80 @@ def ground_and_solve_basics():
 
 @test
 def parse_warning_raise_error(stderr):
-    with test.raises(AspSyntaxError, "in 'code_a', line 2:\n  1 abc\n    ^ syntax error, unexpected EOF"):
+    with test.raises(AspSyntaxError, "syntax error, unexpected EOF") as e:
         ground_and_solve(["abc"], label='code_a')
-    with test.raises(AspSyntaxError, "in ASP code, line 1:\n  1 a :- b.\n         ^ atom does not occur in any rule head:  b"):
+    test.eq("'code_a'", e.exception.filename)
+    test.eq(2, e.exception.lineno)
+    test.eq("    1 abc\n      ^ syntax error, unexpected EOF", e.exception.text)
+
+    with test.raises(AspSyntaxError, 'atom does not occur in any rule head:  b') as e:
         ground_and_solve(["a :- b."])
-    with test.raises(AspSyntaxError, 'in ASP code, line 1:\n  1 a("a"/2).\n      ^^^^^ operation undefined:  ("a"/2)'):
+    test.eq("ASP code", e.exception.filename)
+    test.eq(1, e.exception.lineno)
+    test.eq("    1 a :- b.\n           ^ atom does not occur in any rule head:  b", e.exception.text)
+
+    with test.raises(AspSyntaxError, 'operation undefined:  ("a"/2)') as e:
         ground_and_solve(['a("a"/2).'])
+    test.eq("ASP code", e.exception.filename)
+    test.eq(1, e.exception.lineno)
+    test.eq('    1 a("a"/2).\n        ^^^^^ operation undefined:  ("a"/2)',
+            e.exception.text)
 
-    with test.raises(AspSyntaxError, """in 'code b', line 1:
-  1 a(A)  :-  b.
-      ^ 'A' is unsafe
-    ^^^^^^^^^^^^ unsafe variables in:  a(A):-[#inc_base];b."""):
+    with test.raises(AspSyntaxError, "unsafe variables in:  a(A):-[#inc_base];b.") as e:
         ground_and_solve(['a(A)  :-  b.'], label='code b')
+    test.eq("'code b'", e.exception.filename)
+    test.eq(1, e.exception.lineno)
+    test.eq("""    1 a(A)  :-  b.
+        ^ 'A' is unsafe
+      ^^^^^^^^^^^^ unsafe variables in:  a(A):-[#inc_base];b.""",
+            e.exception.text)
 
-    with test.raises(AspSyntaxError, """in ASP code, line 1:
-  1 a(1). sum(X) :- X = #sum { X : a(A) }.
-                               ^ global variable in tuple of aggregate element:  X"""):
+    with test.raises(AspSyntaxError, "global variable in tuple of aggregate element:  X") as e:
         ground_and_solve(['a(1). sum(X) :- X = #sum { X : a(A) }.'])
+    test.eq("ASP code", e.exception.filename)
+    test.eq(1, e.exception.lineno)
+    test.eq("""    1 a(1). sum(X) :- X = #sum { X : a(A) }.
+                                 ^ global variable in tuple of aggregate element:  X""",
+            e.exception.text)
 
 
 @test
 def unsafe_variables():
-    with test.raises(AspSyntaxError, """in ASP code, line 3:
-  1 
-  2             input.
-  3             output(A, B)  :-  input.
-                       ^ 'A' is unsafe
-                          ^ 'B' is unsafe
-                ^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  output(A,B):-[#inc_base];input.
-  4             % comment"""):
+    with test.raises(AspSyntaxError, "unsafe variables in:  output(A,B):-[#inc_base];input.") as e:
         ground_exc("""
             input.
             output(A, B)  :-  input.
             % comment""")
+    test.eq("ASP code", e.exception.filename)
+    test.eq(3, e.exception.lineno)
+    test.eq("""    1 
+    2             input.
+    3             output(A, B)  :-  input.
+                         ^ 'A' is unsafe
+                            ^ 'B' is unsafe
+                  ^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  output(A,B):-[#inc_base];input.
+    4             % comment""", e.exception.text)
 
 
 @test
 def multiline_error():
-    with test.raises(AspSyntaxError, """in ASP code, line 3:
-  1 
-  2             geel(R)  :-
-                     ^ 'R' is unsafe
-  3                 iets_vrij(S), R=(S, T, N).
-                                        ^ 'T' is unsafe
-                                           ^ 'N' is unsafe
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  geel(R):-[#inc_base];iets_vrij(S);(S,T,N)=R;R=(S,T,N).
-  4             %%%%"""):
+    with test.raises(AspSyntaxError,
+                     "unsafe variables in:  geel(R):-[#inc_base];iets_vrij(S);(S,T,N)=R;R=(S,T,N)."
+                     ) as e:
         ground_exc("""
             geel(R)  :-
                 iets_vrij(S), R=(S, T, N).
             %%%%""")
+    test.eq("ASP code", e.exception.filename)
+    test.eq(3, e.exception.lineno)
+    test.eq("""    1 
+    2             geel(R)  :-
+                       ^ 'R' is unsafe
+    3                 iets_vrij(S), R=(S, T, N).
+                                          ^ 'T' is unsafe
+                                             ^ 'N' is unsafe
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  geel(R):-[#inc_base];iets_vrij(S);(S,T,N)=R;R=(S,T,N).
+    4             %%%%""", e.exception.text)
 
 
 
@@ -586,7 +613,7 @@ def ensure_iso_python_call():
     t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(42).  ensure(assert("a")).')
     try:
         next(t)
-        test.fail("should raise")
+        test.fail("should raise")  # pragma no cover
     except AssertionError as e:
         test.contains(str(e), 'FAILED: assert("a")')
     t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(2).  ensure(assert("a")).')
@@ -629,10 +656,50 @@ def NO_warning_about_duplicate_assert():
         next(t)
     test.complement.contains(o.getvalue(), 'WARNING: duplicate assert: assert("A")')
 
+
 @test
 def do_not_report_on_base_without_any_asserts():
     t = parse_and_run_tests("some. stuff.")
     test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
+
+
+@test
+def assert_with_any():
+    t = parse_and_run_tests("""
+        #program test_one.
+        a; b.
+        assert(@any(a))  :-  a.
+        assert(@any(b))  :-  b.
+        assert(@all(ab)) :- { a; b } = 1.
+        assert(@models(2)).
+     """)
+    test.eq(('test_one', {'asserts': {'assert(ab)', 'assert(models(2))'}, 'models': 2}), next(t))
+
+
+@test
+def duplicate_any_warning(stdout):
+    t = parse_and_run_tests("""
+        #program test_one.
+        a; b.
+        assert(@any(a))  :-  a.
+        assert(@any(a))  :-  b.
+        assert(@models(2)).
+     """)
+    next(t)
+    test.eq("WARNING: duplicate assert: assert(a)\n", stdout.getvalue())
+
+
+@test
+def check_args_of_dependencies():
+    t = parse_and_run_tests("""
+        #program a(x).
+        #program test_b(a).
+        b.
+    """)
+    with test.raises(
+            Exception,
+            "Argument mismatch in 'test_b' for dependency 'a'. Required: ['x'], given: []."):
+        next(t)
 
 
 # more tests in __init__ to avoid circular imports

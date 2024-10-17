@@ -76,8 +76,8 @@ def warn2raise(lines, label, errors, code, msg):
         else:
             name = file
             srclines = [l.removesuffix('\n') for l in open(file).readlines()]
-        srclines = [f"{n:3} {line}" for n, line in enumerate(srclines, 1)]
-        msg_fmt = lambda: f"    {' ' * (start-1)}{'^' * (end-start)} {m}{r}"
+        srclines = [f"{n:5} {line}" for n, line in enumerate(srclines, 1)]
+        msg_fmt = lambda: f"      {' ' * (start-1)}{'^' * (end-start)} {m}{r}"
         offset = 0
         for _, line, start, end, _, m, r in sorted(messages[1:]):
             srclines.insert(line + offset, msg_fmt())
@@ -85,10 +85,38 @@ def warn2raise(lines, label, errors, code, msg):
         _, line, start, end, _, m, r = messages[0]
         srclines.insert(line + len(messages) -1, msg_fmt())
         snippet = srclines[max(0,line-10):line+10]  # TODO testme
+
         if "file could not be opened" in m:
             snippet.append(f"CLINGOPATH={os.environ.get('CLINGOPATH')}")
-        errors.append(AspSyntaxError(f"in {name}, line {line}:{CR}{CR.join(snippet)}"))
+        se = AspSyntaxError(msg + r, (name, line, None, CR.join(snippet)))
+        errors.append(se)
+        #errors.append(AspSyntaxError(f"in {name}, line {line}:{CR}{CR.join(snippet)}"))
     except BaseException as e:
         """ unexpected exception in the code above """
         traceback.print_exc()
         exit(-1)
+
+
+# NB: most tests dor warn2raise are still in runasptests.py, indirectly checking for SyntaxError's
+@test
+def raise_warnings_as_exceptions(stderr):
+    try:
+        warn2raise(None, None, None, None, None)
+    except SystemExit as e:
+        test.eq(-1, e.code)
+    msg = stderr.getvalue()
+    test.startswith(msg, "Traceback (most recent call last):")
+    test.endswith(msg, "TypeError: expected string or bytes-like object, got 'NoneType'\n")
+
+@test
+def print_clingo_path_on_file_could_not_be_opened():
+    errors = []
+    warn2raise([], 'no-file', errors, None, "<block>:3:4-5: info: file could not be opened:\n  dus")
+    error = errors[0]
+    test.isinstance(error, AspSyntaxError)
+    test.eq("'no-file'", error.filename)
+    test.eq(3, error.lineno)
+    test.eq(None, error.offset)
+    test.eq('         ^ file could not be opened:  dus\nCLINGOPATH=None', error.text)
+    test.eq('file could not be opened:  dus', error.msg)
+

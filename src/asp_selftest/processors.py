@@ -94,7 +94,7 @@ class MainApp(Application):
         self.parse(ctl, files)
         #self.load(ctl, files)
         self.ground(ctl, [('base', ())] + self._programs)
-        self.solve(ctl)
+        x = self.solve(ctl)
 
     @delegate
     def parse(self, ctl, files):
@@ -119,20 +119,20 @@ class MainApp(Application):
         ctl.ground(parts)
         
     @delegate
-    def solve(self, *args, **kwargs):
-        pass
+    def solve(self, control):
+        control.solve()
 
     @delegate
     def logger(self, code, message):
-        pass
+        raise Exception("NYIi logger")
 
     @delegate
     def print_model(self, model, printer):
-        pass
+        printer()
 
     @delegate
     def check(self, prev):
-        pass
+        raise Exception("NYI check")
 
 
 def main():
