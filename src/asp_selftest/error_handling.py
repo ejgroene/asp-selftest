@@ -76,7 +76,8 @@ def warn2raise(lines, label, errors, code, msg):
         else:
             name = file
             srclines = [l.removesuffix('\n') for l in open(file).readlines()]
-        srclines = [f"{n:5} {line}" for n, line in enumerate(srclines, 1)]
+        w = 1
+        srclines = [f"    {n:1} {line}" for n, line in enumerate(srclines, 1)]
         msg_fmt = lambda: f"      {' ' * (start-1)}{'^' * (end-start)} {m}{r}"
         offset = 0
         for _, line, start, end, _, m, r in sorted(messages[1:]):

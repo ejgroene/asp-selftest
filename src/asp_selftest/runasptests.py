@@ -231,23 +231,38 @@ def read_programs(asp_code):
 
 def ground_exc(program, label=None, arguments=[], parts=(('base',()),),
                observer=None, context=None, extra_src=None,
+               control=None,
                hooks=()):
     """ grounds an aps program turning messages/warnings into SyntaxErrors """
     lines = program.splitlines() if isinstance(program, str) else program
     errors = []
 
+    class DefaultHook:
+        def arguments(arguments, logger, message_limit):
+            return arguments, logger, message_limit
+        def add(control, source, parts):
+            control.add(source)
+
+    hooks = (DefaultHook,) + hooks
+
     def logger(code, message):
         warn2raise(lines, label, errors, code, message)
+    message_limit = 1
 
-    control = clingo.Control(arguments, logger=logger, message_limit=1)
+    for h in hooks:
+        if hasattr(h, 'arguments'):
+            arguments, logger, message_limit = h.arguments(arguments, logger, message_limit)
+    control = clingo.Control(arguments, logger=logger, message_limit=message_limit)
+
     if observer:
         control.register_observer(observer)
+
     try:
-        control.add('\n'.join(lines))
+        for h in hooks:
+            if hasattr(h, 'add'):
+                h.add(control, '\n'.join(lines), parts)
         if extra_src:
             control.add(extra_src)
-        for h in hooks:
-            h(control)
         control.ground(parts, context=context(control) if context else None)
     except BaseException as e:
         if errors:
@@ -303,7 +318,7 @@ def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
         module = importlib.import_module(module_name)
         return getattr(module, callable_name)
     lines, programs = read_programs(asp_code)
-    return run_tests(lines, programs, base_programs, hooks=[lookup_hook(h) for h in hooks])
+    return run_tests(lines, programs, base_programs, hooks=tuple(lookup_hook(h) for h in hooks))
 
 
 def run_asp_tests(*files, base_programs=(), hooks=()):
@@ -700,6 +715,18 @@ def check_args_of_dependencies():
             Exception,
             "Argument mismatch in 'test_b' for dependency 'a'. Required: ['x'], given: []."):
         next(t)
+
+
+@test
+def hook_basics():
+    with test.raises(SyntaxError, 'atom does not occur in any rule head:  b'):
+        ground_exc("""a :- b.""")
+    class test_hook:
+        def arguments(arguments, logger, message_limit):
+            if not 'no-atom-undefined' in arguments:
+                arguments += ['--warn', 'no-atom-undefined']
+            return arguments, logger, message_limit
+    ground_exc("""a :- b.""", hooks=(test_hook,))
 
 
 # more tests in __init__ to avoid circular imports

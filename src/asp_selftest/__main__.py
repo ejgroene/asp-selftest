@@ -74,3 +74,4 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
     test.eq('Time         : 0.000s (Solving: 0.00s 1st Model: 0.00s Unsat: 0.00s)', s[9])
     test.eq('CPU Time     : 0.000s', s[10])
 
+
