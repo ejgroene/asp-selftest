@@ -55,3 +55,13 @@ def parse(args=None):
 
     argparser.add_argument('--full-trace', help="Print full Python stack trace on error.", action='store_true')
     return argparser.parse_args(args)
+
+
+def parse_clingo_plus_args(argv=None):
+    args = argparse.ArgumentParser(
+            parents = [silent],
+            add_help = False,
+            exit_on_error = False,
+            allow_abbrev = False)
+    args.add_argument('-p', '--programs', nargs='+', help="specify #program's to ground")
+    return args.parse_known_args(argv)
