@@ -123,7 +123,11 @@ def create_some_asserts():
 
 class Tester:
 
-    def __init__(self, name):
+    def __init__(self, name=None):
+        self.reset(name)
+
+
+    def reset(self, name):
         self._name = name
         self._asserts = {}
         self._anys = set()
@@ -131,6 +135,12 @@ class Tester:
         self._models_soll = -1
         self._funcs = {}
         self._current_rule = None
+        self._disabled = False # because we can not remove an observer once registered
+        self.failures = []
+
+
+    def disable(self):
+        self._disabled = True
 
 
     def add_assert(self, a):
@@ -180,13 +190,15 @@ class Tester:
         failures = [a for a in self._asserts if not model.contains(a)]
         if failures:
             modelstr = format_symbols(model.symbols(shown=True))
-
-            raise AssertionError(f"FAILED: {', '.join(map(str, failures))}\nMODEL:\n{modelstr}")
-        return model
+            self.failures.append(AssertionError(f"FAILED: {', '.join(map(str, failures))}\nMODEL:\n{modelstr}"))
+            return False
+        return True
 
 
     def report(self):
         """ When done, check assert(@models(n)) explicitly, then report. """
+        if self.failures:
+            raise self.failures[0]
         models = self._models_ist
         if not self._asserts:
             return {'asserts': set(), 'models': models}
@@ -202,7 +214,8 @@ class Tester:
    
     def rule(self, choice, heads, body):
         """ Observer callback """
-        self._current_rule = choice, heads, body
+        if not self._disabled:
+            self._current_rule = choice, heads, body
 
 
     def __getattr__(self, name):
@@ -282,21 +295,22 @@ def ground_and_solve(lines, on_model=None, **kws):
     return control, result
 
 
+def prog_with_dependencies(programs, name, dependencies):
+    yield name, [clingo.Number(42) for _ in dependencies]
+    for dep, args in dependencies:
+        assert dep in programs, f"Dependency {dep} of {name} not found."
+        formal_args = programs.get(dep, [])
+        formal_names = list(a[0] for a in formal_args)
+        if len(args) != len(formal_names):
+            raise Exception(f"Argument mismatch in {name!r} for dependency {dep!r}. Required: {formal_names}, given: {args}.")
+        yield dep, [clingo.Number(a) for a in args]
+
+
 def run_tests(lines, programs, base_programs=(), hooks=()):
     tests = [name for name in programs if name.startswith('test')]  or  ['base']
     for prog_name in tests:
         dependencies = programs[prog_name]
-        def prog_with_dependencies(name, dependencies):
-            yield name, [clingo.Number(42) for _ in dependencies]
-            for dep, args in dependencies:
-                assert dep in programs, f"Dependency {dep} of {name} not found."
-                formal_args = programs.get(dep, [])
-                formal_names = list(a[0] for a in formal_args)
-                if len(args) != len(formal_names):
-                    raise Exception(f"Argument mismatch in {prog_name!r} for dependency {dep!r}. Required: {formal_names}, given: {args}.")
-                yield dep, [clingo.Number(a) for a in args]
-
-        to_ground = list(prog_with_dependencies(prog_name, dependencies))
+        to_ground = list(prog_with_dependencies(programs, prog_name, dependencies))
         to_ground.extend((b, []) for b in base_programs)  #TODO test me
         try:
             tester = local.current_tester = Tester(prog_name)
@@ -321,16 +335,20 @@ def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
     return run_tests(lines, programs, base_programs, hooks=tuple(lookup_hook(h) for h in hooks))
 
 
+def print_test_result(name, result):
+    asserts = result['asserts']
+    models = result['models']
+    print(f"ASPUNIT: {name}: ", end='', flush=True)
+    print(f" {len(asserts)} asserts,  {models} model{'s' if models>1 else ''}")
+
+
 def run_asp_tests(*files, base_programs=(), hooks=()):
     for program_file in files:
         name = getattr(program_file, 'name', str(program_file))
         print(f"Reading {name}.", flush=True)
         asp_code = program_file.read()
         for name, result in parse_and_run_tests(asp_code, base_programs, hooks=hooks):
-            asserts = result['asserts']
-            models = result['models']
-            print(f"ASPUNIT: {name}: ", end='', flush=True)
-            print(f" {len(asserts)} asserts,  {models} model{'s' if models>1 else ''}")
+            print_test_result(name, result)
 
 
 

@@ -36,7 +36,8 @@ class SyntaxErrors:
         try:
             prev(ctl, files)
         except Exception as e:
-            assert self.exceptions
+            if not self.exceptions:
+                self.exceptions.append(e)
 
     def logger(self, prev, code, message):
         lines = self.input.splitlines() if hasattr(self, 'input') else None
@@ -45,8 +46,4 @@ class SyntaxErrors:
 
     def check(self, prev):
         if self.exceptions:
-            e = self.exceptions[0]
-            if isinstance(e, AspSyntaxError):
-                sys.tracebacklimit = 0
-            raise e
-
+            raise self.exceptions[0]
