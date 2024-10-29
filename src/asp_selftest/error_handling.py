@@ -1,6 +1,7 @@
 import traceback
 import re
 import os
+import math
 
 import clingo
 
@@ -83,8 +84,10 @@ def warn2raise(lines, label, errors, code, msg):
             name = file
             srclines = [l.removesuffix('\n') for l in open(file).readlines()]
         w = 1
-        srclines = [f"    {n:1} {line}" for n, line in enumerate(srclines, 1)]
-        msg_fmt = lambda: f"      {' ' * (start-1)}{'^' * (end-start)} {m}{r}"
+        max_lineno = len(srclines)
+        nr_width = 1 + int(math.log10(max_lineno)) if max_lineno > 0 else 0
+        srclines = [f"    {n:{nr_width}} {line}" for n, line in enumerate(srclines, 1)]
+        msg_fmt = lambda: f"   {' ':{nr_width}}  {' ' * (start-1)}{'^' * (end-start)} {m}{r}"
         offset = 0
         for _, line, start, end, _, m, r in sorted(messages[1:]):
             srclines.insert(line + offset, msg_fmt())
@@ -140,3 +143,21 @@ def print_clingo_path_on_file_could_not_be_opened():
         if old:
             os.environ['CLINGOPATH'] = old
 
+
+@test
+def make_snippet_witg_proper_indent():
+    src_lines = ['%1', '%2','%3','%4','%5','%6','%7','%8','%9','%10','error']
+    errors = []
+    warn2raise(src_lines, None, errors, 'code', "<block>:11:1-6: info: hier moet een punt staan:\n  snappie?")
+    test.eq("""     2 %2
+     3 %3
+     4 %4
+     5 %5
+     6 %6
+     7 %7
+     8 %8
+     9 %9
+    10 %10
+    11 error
+       ^^^^^ hier moet een punt staan:  snappie?""",
+        errors[0].text, diff=test.diff)
