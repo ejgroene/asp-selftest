@@ -12,6 +12,7 @@ import shutil
 import itertools
 import traceback
 import importlib
+import collections
 
 
 from clingo import Function, Number
@@ -135,12 +136,9 @@ class Tester:
         self._models_soll = -1
         self._funcs = {}
         self._current_rule = None
-        self._disabled = False # because we can not remove an observer once registered
         self.failures = []
-
-
-    def disable(self):
-        self._disabled = True
+        self._symbols = {}
+        self._rules = collections.defaultdict(set)
 
 
     def add_assert(self, a):
@@ -150,9 +148,9 @@ class Tester:
     def all(self, *args):
         """ ASP API: add a named assert to be checked for each model """
         args, assrt = create_assert(*args)
-        if rule := self._asserts.get(assrt):
-            if rule != self._current_rule:
-                print(f"WARNING: duplicate assert: {assrt}")
+        #if rule := self._asserts.get(assrt):
+        #    if rule != self._current_rule:
+        #        print(f"WARNING: duplicate assert: {assrt}, {self._current_rule}")
         self.add_assert(assrt)
         return args
 
@@ -180,6 +178,12 @@ class Tester:
                 self._models_soll = models.arguments[0].number
         self._models_ist += 1
 
+        for a, s in self._symbols.items():
+            body = self._rules[a]
+            if s in self._asserts and len(body) > 1:
+                self.failures.append(Warning(f"Duplicate: {s} (disjunction found)"))
+                return False
+
         for ensure in (s for s in model.symbols(atoms=True) if has_name(s, 'ensure')):
             fact = ensure.arguments[0]
             self.add_assert(fact)
@@ -198,6 +202,7 @@ class Tester:
     def report(self):
         """ When done, check assert(@models(n)) explicitly, then report. """
         if self.failures:
+            assert len(self.failures) == 1, self.failures
             raise self.failures[0]
         models = self._models_ist
         if not self._asserts:
@@ -213,17 +218,21 @@ class Tester:
 
    
     def rule(self, choice, heads, body):
-        """ Observer callback """
-        if not self._disabled:
-            self._current_rule = choice, heads, body
+        """ Observer callback
+            Needed for detecting duplicate assertions. It collects all rules and afterwards
+            checks it there are rules for asserts that have multiple bodies (disjunctions).
+        """
+        for h in heads:
+            if body:  #TODO TestMe
+                self._rules[h].add(tuple(body))
+        self._current_rule = choice, heads, body
 
+    def output_atom(self, symbol, atom):
+        self._symbols[atom] = symbol
 
     def __getattr__(self, name):
         if name in self._funcs:
             return self._funcs[name]
-        #def f(*a, **k):
-        #    print(f"{name}({a}, {k})")
-        #return f
         raise AttributeError(name)
 
 
@@ -667,14 +676,14 @@ def alternative_models_predicate():
 def warning_about_duplicate_assert():
     t = parse_and_run_tests("""
         #program test_one.
-        a(1; 2).
+        #defined a/1. %a(1; 2).
+        #external a(1; 2).
         assert(@all("A"))  :-  a(1).
         assert(@all("A"))  :-  a(2).
         assert(@models(1)).
      """)
-    with test.stdout as o:
+    with test.raises(Warning, 'Duplicate: assert("A") (disjunction found)'):
         next(t)
-    test.contains(o.getvalue(), 'WARNING: duplicate assert: assert("A")')
 
 
 @test
@@ -688,6 +697,23 @@ def NO_warning_about_duplicate_assert():
     with test.stdout as o:
         next(t)
     test.complement.contains(o.getvalue(), 'WARNING: duplicate assert: assert("A")')
+
+
+@test
+def NO_warning_about_duplicate_assert():
+    t = parse_and_run_tests("""
+        #program test_one_1.
+        #defined output/3.
+        time(0).
+        #external bool(T, B)  :  time(T),  def_precondition(_, _, B).
+        precondition(T, W, F) :- time(T), def_precondition(W, F, _),  bool(T, B) : def_precondition(W, F, B).
+        def_precondition(144, voeding, "STROOM-OK").
+        def_precondition(144, voeding, "SPANNING-OK").
+        bool(0, "STROOM-OK").
+        assert(@all("precondition"))  :-  { precondition(0, 144, voeding) } = 0.
+        assert(@models(1)).
+     """)
+    test.eq([('test_one_1', {'asserts': {'assert("precondition")', 'assert(models(1))'}, 'models': 1})], list(t))
 
 
 @test

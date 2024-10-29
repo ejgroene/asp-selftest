@@ -111,13 +111,19 @@ def raise_warnings_as_exceptions(stderr):
 
 @test
 def print_clingo_path_on_file_could_not_be_opened():
-    errors = []
-    warn2raise([], 'no-file', errors, None, "<block>:3:4-5: info: file could not be opened:\n  dus")
-    error = errors[0]
-    test.isinstance(error, AspSyntaxError)
-    test.eq("'no-file'", error.filename)
-    test.eq(3, error.lineno)
-    test.eq(None, error.offset)
-    test.eq('         ^ file could not be opened:  dus\nCLINGOPATH=None', error.text)
-    test.eq('file could not be opened:  dus', error.msg)
+    old = os.environ.get('CLINGOPATH', None)
+    os.environ['CLINGOPATH'] = 'paf'
+    try:
+        errors = []
+        warn2raise([], 'no-file', errors, None, "<block>:3:4-5: info: file could not be opened:\n  dus")
+        error = errors[0]
+        test.isinstance(error, AspSyntaxError)
+        test.eq("'no-file'", error.filename)
+        test.eq(3, error.lineno)
+        test.eq(None, error.offset)
+        test.eq('         ^ file could not be opened:  dus\nCLINGOPATH=paf', error.text)
+        test.eq('file could not be opened:  dus', error.msg)
+    finally:
+        if old:
+            os.environ['CLINGOPATH'] = old
 

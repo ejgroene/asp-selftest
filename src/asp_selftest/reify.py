@@ -37,9 +37,6 @@ class Reify:
         prev(ctl, parts, context)
         def get_reifies():
             symbols = {s.literal: s.symbol for s in ctl.symbolic_atoms}
-            for r in o.rules:
-                print(">>>", *r)
-            print(symbols)
             reifies = set()
             for choice, heads, body in o.resolve(symbols.__getitem__):
                 h, new_heads = replace(heads)
@@ -53,7 +50,6 @@ class Reify:
             with tempfile.NamedTemporaryFile(mode='w', prefix='reify-', suffix='.lp') as f:
                 for choice, heads, body in reifies:
                     atom= f"{', '.join(str(h) for h in heads)}  :-  {', '.join(str(b) for b in body)}."
-                    print("REIFIED:", atom)
                     f.write(atom)
                 f.flush()
                 ctl.load(f.name)
@@ -68,15 +64,6 @@ class RuleCollector:
 
     def rule(self, choice, heads, body):
         self.rules.append((choice, heads, body))
-
-    def external(self, *a):
-        print("EXTERNAL:", a)
-
-    def output_atom(self, symbol, atom):
-        print("ATOM:", atom, symbol)
-
-    def output_term(self, symbol, condition):
-        print("TERM:", condition, symbol)
 
     def resolve(self, get):
         for choice, heads, body in self.rules:

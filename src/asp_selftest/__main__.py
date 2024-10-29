@@ -14,7 +14,7 @@ from clingo import clingo_main, Control
 
 from .arguments import parse, parse_clingo_plus_args
 from .runasptests import run_asp_tests
-from .application import MainApp
+from .application import MainApp, main_main
 from .processors import SyntaxErrors
 from .tester import Tester
 
@@ -33,10 +33,7 @@ def clingo_plus_tests():
     """ new all-in dropin replacement for Clingo WIP EXPERIMENTAL """
     """ Add --programs option + testing and ground/solve as stock Clingo as much as possible. """
     opts, remaining = parse_clingo_plus_args()
-    opts.programs and print("Grounding programs:", opts.programs)
-    app = MainApp(programs=opts.programs, hooks=[SyntaxErrors(), Tester()])
-    r = clingo_main(app, remaining)
-    app.check()
+    main_main(opts.programs, remaining, hooks=[Tester(), SyntaxErrors()])
 
 
 
@@ -131,10 +128,33 @@ def clingo_dropin_default_hook_tests(tmp_path, argv, stdout):
     test.contains(s, 'ASPUNIT: test_fact_1:  2 asserts,  1 model\n')
     test.contains(s, 'ASPUNIT: test_fact_2:  2 asserts,  1 model\n')
 
+
 @test
-def clingo_dropin_default_hook_errors(tmp_path, argv, stdout):
+def clingo_dropin_default_hook_errors(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f'
     f.write_text("""syntax error """)
     argv += [f.as_posix()]
     with test.raises(SyntaxError, "syntax error, unexpected <IDENTIFIER>"):
         clingo_plus_tests()
+    test.contains(stdout.getvalue(), """UNKNOWN\n
+Models       : 0+""")
+    test.contains(stderr.getvalue(), """1 syntax error 
+             ^^^^^ syntax error, unexpected <IDENTIFIER>""")
+
+@test
+def access_python_script_functions(tmp_path, argv, stdout):
+    f = tmp_path/'f'
+    f.write_text("""
+#script (python)
+def my_func(a):
+    return a
+#end.
+#program test_one.
+assert(@all(@my_func("hello"))).
+assert(@models(1)).
+    """)
+    argv += [f.as_posix()]
+    clingo_plus_tests()
+    s = stdout.getvalue()
+    test.contains(s, "ASPUNIT: test_one:  2 asserts,  1 model")
+    #test.contains(s, 'assert(models(1)) assert("hello")')
