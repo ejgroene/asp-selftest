@@ -26,7 +26,7 @@ class CompoundContext:
         return getattr(sys.modules['__main__'], name)
 
 
-class Tester:
+class TesterHook:
 
     def __init__(this):
         this.programs = {}

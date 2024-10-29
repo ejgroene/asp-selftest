@@ -35,7 +35,8 @@ def save_exception(f):
         try:
             return f(self, *a, **k)
         except RuntimeError as e:
-            print(f"{f.__qualname__} got exception:", e)
+            # uncomment when you loose errors during use
+            #print(f"{f.__qualname__} got exception:", e)
             assert len(self.exceptions) == 1
     return wrap
 
@@ -48,11 +49,12 @@ class SyntaxErrors:
     def message_limit(this, self):
         return 1
 
+    @save_exception
     def main(this, self, ctl, files):
         try:
             self.main(ctl, files)
         except Stop:
-            raise this.exceptions[0] from None
+            #raise this.exceptions[0] from None
             pass
         finally:
             #this.exceptions.clear()
@@ -94,4 +96,4 @@ class SyntaxErrors:
                 print("================= multiple exceptions =============")
                 for e in this.exceptions:
                     print(e)
-            raise this.exceptions[-1]
+            raise this.exceptions[-1] from None

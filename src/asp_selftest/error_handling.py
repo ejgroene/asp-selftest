@@ -2,6 +2,8 @@ import traceback
 import re
 import os
 
+import clingo
+
 import selftest
 test = selftest.get_tester(__name__)
 
@@ -68,6 +70,10 @@ def parse_clingo_error_messages():
 def warn2raise(lines, label, errors, code, msg):
     """ Clingo calls this, but can't handle exceptions well, so we wrap everything. """
     try:
+        # deal with '<cmd>' (command line) error messages separately
+        if msg and msg.startswith('<cmd>'):
+            errors.append(RuntimeError(msg))
+            return
         messages = parse_message(msg)
         file, line, start, end, key, msg, more = messages[0]
         if file == '<block>':
@@ -108,6 +114,13 @@ def raise_warnings_as_exceptions(stderr):
     msg = stderr.getvalue()
     test.startswith(msg, "Traceback (most recent call last):")
     test.endswith(msg, "TypeError: expected string or bytes-like object, got 'NoneType'\n")
+
+@test
+def deal_with_command_line_errors():
+    errors = []
+    warn2raise(None, None, errors, None, "<cmd>: all wrong!")
+    test.eq(RuntimeError, type(errors[0]))
+    test.eq(('<cmd>: all wrong!',), errors[0].args)
 
 @test
 def print_clingo_path_on_file_could_not_be_opened():
