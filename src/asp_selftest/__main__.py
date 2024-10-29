@@ -22,6 +22,8 @@ from .tester import Tester
 
 # this function is directly executed by the pip installed code wrapper, see pyproject.toml
 def main():
+    from .arguments import maybe_silence_tester
+    maybe_silence_tester() # TODO somehow test this
     args = parse()
     #if not args.full_trace:
     #    sys.tracebacklimit = 0
@@ -30,6 +32,8 @@ def main():
 
 # this function is directly executed by pip installed code wrapper, see pyproject.toml
 def clingo_plus_tests():
+    from .arguments import maybe_silence_tester
+    maybe_silence_tester() # TODO somehow test this
     """ new all-in dropin replacement for Clingo WIP EXPERIMENTAL """
     """ Add --programs option + testing and ground/solve as stock Clingo as much as possible. """
     opts, remaining = parse_clingo_plus_args()

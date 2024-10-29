@@ -1,7 +1,4 @@
 
-# maybe silence tester before all else
-from .arguments import maybe_silence_tester
-maybe_silence_tester()
 
 
 # import/run tests for arguments after --silent checked
