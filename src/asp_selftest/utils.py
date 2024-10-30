@@ -1,4 +1,12 @@
 import clingo
+import functools
+import inspect
+import traceback
+
+
+import selftest
+test = selftest.get_tester(__name__)
+
 
 def is_processor_predicate(p):
     """ check if p is a processor(<classname>) and return <classname> """
@@ -18,3 +26,143 @@ def is_processor_predicate(p):
                                 p = p.string
                                 if isinstance(p, str):
                                     return p
+
+
+def locals(name):
+    f = inspect.currentframe().f_back
+    while f := f.f_back:
+        if value := f.f_locals.get(name):
+            yield value
+
+
+@test
+def find_locals():
+    l = 1
+    test.eq([], list(locals('l')))
+    def f():
+        l = 2
+        test.eq([1], list(locals('l')))
+    f()
+
+
+def delegate(function):
+    """ Decorator for delegating methods to processors """
+    @functools.wraps(function)
+    def dispatch(self, *args, **kwargs):
+        __mark__ = 1
+        for obj in self.delegates:
+            if handler := getattr(obj, function.__name__, None):
+                if handler in locals('handler'):
+                    continue
+                return handler(self, *args, **kwargs)
+        seen = ', '.join(sorted(set(l.__qualname__ for l in locals('handler'))))
+        raise AttributeError(f"No more {function.__name__!r} found after: {seen}")
+    active = dispatch
+    return dispatch
+
+
+@test
+def delegation_none():
+    class B:
+        delegates = ()
+        @delegate
+        def f(self):
+            pass
+    with test.raises(AttributeError):
+        B().f()
+
+
+@test
+def delegation_one():
+    class A:
+        def f(this, self):
+            return this, self
+    a = A()
+    class B:
+        delegates = (a,)
+        @delegate
+        def f(self):
+            pass
+    b = B()
+    test.eq((a, b), b.f())
+
+
+@test
+def delegation_loop():
+    class A:
+        def f(this, self):
+            return self.f()
+    a = A()
+    class B:
+        delegates = (a,)
+        @delegate
+        def f(self):
+            pass
+    with test.raises(AttributeError):
+        B().f()
+
+
+@test
+def delegation_loop_back_forth():
+    class A:
+        def f(this, self):
+            return self.f()
+    a = A()
+    class B:
+        def f(this, self):
+            return self.f()
+    b = B()
+    class C:
+        delegates = (a, b)
+        @delegate
+        def f(self):
+            pass
+    with test.raises(
+            AttributeError,
+            "No more 'f' found after: delegation_loop_back_forth.<locals>.A.f, delegation_loop_back_forth.<locals>.B.f"):
+        C().f()
+
+
+@test
+def delegation():
+    class B:
+        def f(this, self):
+            return self.g() * self.h() * this.i() # 5 * 3 * 2
+        def h(this, self):
+            return 3
+        def i(self):
+            return 2
+    class C:
+        def g(this, self):
+            return 5
+        def i(this, self):
+            return 7
+    class A:
+        delegates = [B(), C()]
+        @delegate
+        def f(self):
+            pass
+        @delegate
+        def h(self):
+            pass
+        @delegate
+        def g(self):
+            pass
+        @delegate
+        def i(self):
+            pass
+    test.eq(30, A().f())
+
+
+def guard(f):
+    @functools.wraps(f)
+    def wrap(*a, **k):
+        try:
+            return f(*a, **k)
+        except Exception as e:
+            print(f"{f.__qualname__} must not raise exceptions. It did.", file=sys.stderr)
+            traceback.print_exc()
+            exit(-1)
+    return wrap
+
+

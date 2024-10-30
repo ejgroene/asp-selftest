@@ -1,22 +1,18 @@
-
 """ WIP: Clingo drop-in replacement with support for tests and hooks """
 
 
 import sys
-import types
-import functools
 import importlib
-import argparse
-import inspect
-
+import contextlib
 
 import clingo
 from clingo import Control, Application, clingo_main
+
 from clingo.script import enable_python
 enable_python()
 
 
-from .utils import is_processor_predicate
+from .utils import is_processor_predicate, delegate, find_locals, guard as clingo_defined
 
 
 import selftest
@@ -25,138 +21,14 @@ test = selftest.get_tester(__name__)
 
 def main_main(programs, remaining, hooks):
     programs and print("Grounding programs:", programs)
-    app = MainApp(programs=programs, hooks=hooks)
-    clingo_main(app, remaining)
-    app.check()
-
-def locals(name):
-    f = inspect.currentframe().f_back
-    while f := f.f_back:
-        if value := f.f_locals.get(name):
-            yield value
-
-
-@test
-def find_locals():
-    l = 1
-    test.eq([], list(locals('l')))
-    def f():
-        l = 2
-        test.eq([1], list(locals('l')))
-    f()
-
-
-def delegate(function):
-    """ Decorator for delegating methods to processors """
-    @functools.wraps(function)
-    def dispatch(self, *args, **kwargs):
-        __mark__ = 1
-        for obj in self.delegates:
-            if handler := getattr(obj, function.__name__, None):
-                if handler in locals('handler'):
-                    continue
-                return handler(self, *args, **kwargs)
-        seen = ', '.join(sorted(set(l.__qualname__ for l in locals('handler'))))
-        raise AttributeError(f"No more {function.__name__!r} found after: {seen}")
-    active = dispatch
-    return dispatch
-
-
-@test
-def delegation_none():
-    class B:
-        delegates = ()
-        @delegate
-        def f(self):
-            pass
-    with test.raises(AttributeError):
-        B().f()
-
-
-@test
-def delegation_one():
-    class A:
-        def f(this, self):
-            return this, self
-    a = A()
-    class B:
-        delegates = (a,)
-        @delegate
-        def f(self):
-            pass
-    b = B()
-    test.eq((a, b), b.f())
-
-
-@test
-def delegation_loop():
-    class A:
-        def f(this, self):
-            return self.f()
-    a = A()
-    class B:
-        delegates = (a,)
-        @delegate
-        def f(self):
-            pass
-    with test.raises(AttributeError):
-        B().f()
-
-
-@test
-def delegation_loop_back_forth():
-    class A:
-        def f(this, self):
-            return self.f()
-    a = A()
-    class B:
-        def f(this, self):
-            return self.f()
-    b = B()
-    class C:
-        delegates = (a, b)
-        @delegate
-        def f(self):
-            pass
-    with test.raises(
-            AttributeError,
-            "No more 'f' found after: delegation_loop_back_forth.<locals>.A.f, delegation_loop_back_forth.<locals>.B.f"):
-        C().f()
-
-
-@test
-def delegation():
-    class B:
-        def f(this, self):
-            return self.g() * self.h() * this.i() # 5 * 3 * 2
-        def h(this, self):
-            return 3
-        def i(self):
-            return 2
-    class C:
-        def g(this, self):
-            return 5
-        def i(this, self):
-            return 7
-    class A:
-        delegates = [B(), C()]
-        @delegate
-        def f(self):
-            pass
-        @delegate
-        def h(self):
-            pass
-        @delegate
-        def g(self):
-            pass
-        @delegate
-        def i(self):
-            pass
-    test.eq(30, A().f())
-
+    with MainApp(programs=programs, hooks=hooks) as app:
+        clingo_main(app, remaining)
 
 
 class DefaultHook:
+    """ Implements the standard behaviour of grounding and solving ASP programs.
+        It supports adding hooks during parsing.
+    """
 
     def __init__(self, programs):
         self._programs = [(p, ()) for p in programs or ()]
@@ -165,6 +37,7 @@ class DefaultHook:
         return 10
 
     def main(this, self, ctl, files):
+        """ Template method sequencing through all steps. """
         ast = []
         self.parse(ctl, files, ast.append)
         self.load(ctl, ast)
@@ -197,31 +70,30 @@ class DefaultHook:
         control.solve(*a, **k)
 
     def logger(this, self, code, message):
-        # should not raise exceptions
         return code, message # pragma no cover
 
     def print_model(this, self, model, printer):
         printer()
 
-    def check(this, self):
-        raise NotImplementedError("check")  # pragma no cover
 
 
-import functools
-import traceback
-def guard(f):
-    @functools.wraps(f)
-    def wrap(*a, **k):
-        try:
-            return f(*a, **k)
-        except Exception as e:
-            print(f"{f.__qualname__} must not raise exceptions. It did.", file=sys.stderr)
-            traceback.print_exc()
-            exit(-1)
-    return wrap
+class MainApp(Application, contextlib.AbstractContextManager):
+    """ Clingo Main application.
 
+        It follows Clingo's implementation except that is uses an explict parse 
+        and load step in order to interecept processing as early as during parse.
 
-class MainApp(Application):
+        It uses delegation instead of inheritance to dynamically add additional
+        objects (hooks) that can refine the methods called by Clingo.
+
+        The default behaviour is in the last hook: DefaultHook. It defines a
+        template methode for main() which sequences through parse, load, ground
+        and solve.
+
+        Because methods called by Clingo must not raise exceptions, all such methods
+        are marked by clingo_called. Because main() can also not raise exceptions,
+        we collect exceptions and raise them afterwards in check().
+    """
 
     def __init__(self, programs=None, hooks=()):
         self.delegates = list(hooks) + [DefaultHook(programs)]
@@ -230,10 +102,22 @@ class MainApp(Application):
 
     @property
     @delegate
+    @clingo_defined
     def message_limit(self):
         raise NotImplementedError("message_limit")  # pragma no cover
 
     @delegate
+    @clingo_defined
+    def logger(self, code, message):
+        raise NotImplementedError("logger")  # pragma no cover
+
+    @delegate
+    @clingo_defined
+    def print_model(self, model, printer):
+        raise NotImplementedError("print_model")  # pragma no cover
+
+    @delegate
+    @clingo_defined
     def main(self, ctl, files):
         raise NotImplementedError("main")  # pragma no cover
 
@@ -254,16 +138,11 @@ class MainApp(Application):
         raise NotImplementedError("solve")  # pragma no cover
 
     @delegate
-    def logger(self, code, message):
-        raise NotImplementedError("logger")  # pragma no cover
-
-    @delegate
-    def print_model(self, model, printer):
-        raise NotImplementedError("print_model")  # pragma no cover
-
-    @delegate
     def check(self):
         raise NotImplementedError("check")  # pragma no cover
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self.check()
 
 
 def find_symbol(ctl, name, arity=0):
