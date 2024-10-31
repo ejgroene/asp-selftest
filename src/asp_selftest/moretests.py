@@ -11,7 +11,10 @@ from .__main__ import main, clingo_plus_tests
 from .application import MainApp
 from .processors import SyntaxErrors
 from .tester import TesterHook
-from .runasptests import parse_and_run_tests, ground_exc
+from .runasptests2 import parse_and_run_tests, ground_exc
+
+from .tester import local, register, format_symbols
+
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -23,7 +26,6 @@ def register_python_function():
 #script (python)
 def repeat(message):
     return message
-from asp_selftest.runasptests import register
 register(repeat)
 #end.
 
@@ -31,7 +33,8 @@ register(repeat)
 assert(@all(@repeat("hi"))).
 assert(@models(1)).
 """)
-    test.contains(next(t)[1]['asserts'], 'assert("hi")')
+    test.eq([('base', {'asserts': set(), 'models': 1}),
+             ('test_me', {'asserts': {'assert(models(1))', 'assert("hi")'}, 'models': 1})], list(t))
 
 
 @test
@@ -40,7 +43,6 @@ def reraise_unknown_exceptinos():
 #script (python)
 def exception_raiser():
     raise Exception("unknown")
-from asp_selftest.runasptests import register
 register(exception_raiser)
 #end.
 
@@ -91,9 +93,6 @@ def check_flags():
 
 
 
-from .runasptests import local, register, format_symbols
-
-
 @test
 def register_asp_function():
     local.current_tester = None
@@ -142,7 +141,7 @@ def main_entry_point_basics(stdin, stdout, argv):
     test.endswith(response, 'ASPUNIT: base:  0 asserts,  1 model\n')
 
 
-@test
+#@test  # --processor no longer supported
 def main_entry_processing_hook(stdin, stdout, argv):
     argv += ['--processor', 'asp_selftest:test_hook']  # test_hook is in __init__.py
     stdin.write("a.\n")
@@ -163,18 +162,19 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
     test.eq('clingo+tests version 5.7.1', s[0])
     test.startswith(s[1], 'Reading from')
     test.endswith(s[1], 'f.lp')
-    test.eq('Solving...', s[2])
-    test.eq('Answer: 1', s[3])
-    test.eq('a', s[4])
-    test.eq('SATISFIABLE', s[5])
-    test.eq('', s[6])
-    test.eq('Models       : 1+', s[7])
-    test.eq('Calls        : 1', s[8])
-    test.contains(s[9], 'Time')
-    test.contains(s[9], 'Solving:')
-    test.contains(s[9], '1st Model:')
-    test.contains(s[9], 'Unsat:')
-    test.startswith(s[10], 'CPU Time     : 0.00')
+    test.eq('ASPUNIT: base:  0 asserts,  1 model', s[2])
+    test.eq('Solving...', s[3])
+    test.eq('Answer: 1', s[4])
+    test.eq('a', s[5])
+    test.eq('SATISFIABLE', s[6])
+    test.eq('', s[7])
+    test.eq('Models       : 1+', s[8])
+    test.eq('Calls        : 1', s[9])
+    test.contains(s[10], 'Time')
+    test.contains(s[10], 'Solving:')
+    test.contains(s[10], '1st Model:')
+    test.contains(s[10], 'Unsat:')
+    test.startswith(s[11], 'CPU Time     : 0.00')
 
 
 @test
@@ -189,7 +189,7 @@ def syntax_errors_basics(tmp_path):
 
 
 @test
-def tester_runs_tests(tmp_path):
+def tester_runs_tests(tmp_path, stdout):
     f = tmp_path/'f'
     f.write_text("""
     fact(a).
@@ -199,6 +199,8 @@ def tester_runs_tests(tmp_path):
     """)
     app = MainApp(hooks=[TesterHook()])
     app.main(Control(), [f.as_posix()])
+    test.eq('ASPUNIT: base:  0 asserts,  1 model\nASPUNIT: test_fact:  2 asserts,  1 model\n',
+            stdout.getvalue())
 
 
 @test

@@ -38,8 +38,10 @@ def save_exception(f):
             # uncomment when you loose errors during use
             #print(f"{f.__qualname__} got exception:", type(e), e, file=sys.stderr)
             if self.exceptions:
+                assert len(self.exceptions) == 1, self.exceptions
                 raise Stop(f.__qualname__)
-            assert len(self.exceptions) == 1, self.exceptions
+            else:
+                raise RuntimeError(f"{f.__qualname__} got {e} while no errors have ben logged.")
     return wrap
 
 

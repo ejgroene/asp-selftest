@@ -1,108 +1,20 @@
 
 """ Functions to runs all tests in an ASP program. """
 
-import inspect
 import clingo
 import os
-import re
-import sys
-import ast
-import threading
 import shutil
-import itertools
-import traceback
-import importlib
-import collections
 import tempfile
-
 
 from clingo import Function, Number
 
-
-# Allow ASP programs started in Python to include Python themselves.
-from clingo.script import enable_python
-enable_python()
-
-
-from .error_handling import warn2raise, AspSyntaxError
+from .error_handling import AspSyntaxError
 from .application import MainApp
 from .processors import SyntaxErrors
 from .tester import TesterHook, CompoundContext
 
-
-def has_name(symbol, name):
-   return symbol.type == clingo.SymbolType.Function and symbol.name == name
-
-
 import selftest
 test = selftest.get_tester(__name__)
-
-
-CR = '\n' # trick to support old python versions that do not accecpt \ in f-strings
-def batched(iterable, n):
-    """ not in python < 3.12 """
-    # batched('ABCDEFG', 3) → ABC DEF G
-    if n < 1:
-        raise ValueError('n must be at least one')
-    iterator = iter(iterable)
-    while batch := tuple(itertools.islice(iterator, n)):
-        yield batch
-
-@test
-def batch_it():
-    test.eq([], list(batched([], 1)))
-    test.eq([(1,)], list(batched([1], 1)))
-    test.eq([(1,),(2,)], list(batched([1,2], 1)))
-    test.eq([(1,)], list(batched([1], 2)))
-    test.eq([(1,2)], list(batched([1,2], 2)))
-    test.eq([(1,2), (3,)], list(batched([1,2,3], 2)))
-    with test.raises(ValueError, 'n must be at least one'):
-        list(batched([], 0))
-
-
-# We use thread locals to communicate state between python code embedded in ASP and this module here.
-local = threading.local()
-
-
-def register(func):
-    """ Selftest uses the context for supplying the functions @all and @models to the ASP program. 
-        As a result the ASP program own Python functions are ignored. To reenable these, they must
-        be registered using register(func).
-    """
-    assert inspect.isfunction(func), f"{func!r} must be a function"
-    if tester := getattr(local, 'current_tester', None):  #TODO testme hasattr iso local.current_tester
-        tester.add_function(func)
-
-
-def format_symbols(symbols):
-    symbols = sorted(str(s) for s in symbols)
-    if len(symbols) > 0:
-        col_width = (max(len(w) for w in symbols)) + 2
-        width, h = shutil.get_terminal_size((120, 20))
-        cols = width // col_width
-        modelstr = '\n'.join(
-                ''.join(s.ljust(col_width) for s in b)
-            for b in batched(symbols, max(cols, 1)))
-    else:
-        modelstr = "<empty>"
-    return modelstr
-
-
-def create_assert(*args):
-    if len(args) > 1:
-        args = clingo.Function('', args)
-    else:
-        args = args[0]
-    return args, clingo.Function("assert", (args,))
-
-
-@test
-def create_some_asserts():
-    test.eq((Number(3), Function('assert', [Number(3)])),
-            create_assert(Number(3)))
-    test.eq((Function('', [Number(4), Number(2)]), Function('assert', [Function('', [Number(4), Number(2)])])),
-            create_assert(Number(4), Number(2)))
-
 
 
 default = lambda p: tuple(p) == (('base', ()), )
@@ -112,7 +24,9 @@ def ground_exc(program, label='ASP-code', arguments=[], parts=(('base', ()),),
                observer=None, context=None, extra_src=None,
                control=None,
                hooks=()):
-    """ grounds an aps program turning messages/warnings into SyntaxErrors """
+    """ grounds an aps program turning messages/warnings into SyntaxErrors
+        it also solves; the function name is legacy
+    """
     class Haak:
         def ground(this, self, ctl, x_parts, x_context):
             assert default(parts) or default(x_parts), [parts, x_parts]
@@ -126,6 +40,8 @@ def ground_exc(program, label='ASP-code', arguments=[], parts=(('base', ()),),
         f.seek(0)
         with MainApp(hooks=list(hooks) + [SyntaxErrors(), Haak()]) as app:
             ctl = clingo.Control(arguments, logger=app.logger, message_limit=app.message_limit)
+            if extra_src:
+                ctl.add(extra_src)
             if observer:
                 ctl.register_observer(observer)
             app.main(ctl, [f.name])
@@ -134,61 +50,23 @@ def ground_exc(program, label='ASP-code', arguments=[], parts=(('base', ()),),
 
 
 def ground_and_solve(lines, on_model=None, **kws):
-    control = ground_exc(lines, arguments=['0'], **kws)
+    control = ground_exc(lines, arguments=['0'], **kws)   # TODO this already solves
     result = None
     if on_model:
         result = control.solve(on_model=on_model)
     return control, result
 
 
-# keep
-def prog_with_dependencies(programs, name, dependencies):
-    yield name, [clingo.Number(42) for _ in dependencies]
-    for dep, args in dependencies:
-        assert dep in programs, f"Dependency {dep} of {name} not found."
-        formal_args = programs.get(dep, [])
-        formal_names = list(a[0] for a in formal_args)
-        if len(args) != len(formal_names):
-            raise Exception(f"Argument mismatch in {name!r} for dependency {dep!r}. Required: {formal_names}, given: {args}.")
-        yield dep, [clingo.Number(a) for a in args]
-
-
-def parse_and_run_tests(asp_code): #, base_programs=()):
+def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
     reports = []
-    ctl = ground_exc(asp_code, hooks=[TesterHook(on_report=lambda *a: reports.append(a))])
+    ctl = ground_exc(asp_code, hooks=list(hooks) + [TesterHook(on_report=lambda *a: reports.append(a))])
     for r in reports:
         yield r
 
-    def lookup_hook(h):
-        module_name, callable_name = h.split(':')
-        module = importlib.import_module(module_name)
-        return getattr(module, callable_name)
-    #lines, programs = read_programs(asp_code)
-    #return run_tests(lines, programs, base_programs, hooks=tuple(lookup_hook(h) for h in hooks))
-    return
 
-
-#keep
-def print_test_result(name, result):
-    asserts = result['asserts']
-    models = result['models']
-    print(f"ASPUNIT: {name}: ", end='', flush=True)
-    print(f" {len(asserts)} asserts,  {models} model{'s' if models>1 else ''}")
-
-
-def run_asp_tests(*files, base_programs=(), hooks=()):
-    for program_file in files:
-        name = getattr(program_file, 'name', str(program_file))
-        print(f"Reading {name}.", flush=True)
-        asp_code = program_file.read()
-        for name, result in parse_and_run_tests(asp_code, base_programs, hooks=hooks):
-            print_test_result(name, result)
-
-
-
-#@test
+@test
 def check_for_duplicate_test(raises:(Exception, "Duplicate program name: 'test_a'")):
-    read_programs(""" #program test_a. \n #program test_a. """)
+    next(parse_and_run_tests(""" #program test_a. \n #program test_a. """))
 
 
 @test
@@ -199,30 +77,32 @@ def simple_program():
         assert(@all("facts")) :- fact.
         assert(@models(1)).
      """)
+    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
     test.eq(('test_fact', {'asserts': {'assert("facts")', 'assert(models(1))'}, 'models': 1}), next(t))
 
 
-#@test
+@test
 def dependencies():
     t = parse_and_run_tests("""
         base_fact.
 
-        #program one(b).
+        #program one().
         one_fact.
 
         #program test_base(base).
         assert(@all("base_facts")) :- base_fact.
         assert(@models(1)).
 
-        #program test_one(base, one(1)).
+        #program test_one(base, one).
         assert(@all("one includes base")) :- base_fact, one_fact.
         assert(@models(1)).
      """)
+    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
     test.eq(('test_base', {'asserts': {'assert("base_facts")'       , 'assert(models(1))'}, 'models': 1}), next(t))
     test.eq(('test_one' , {'asserts': {'assert("one includes base")', 'assert(models(1))'}, 'models': 1}), next(t))
 
 
-#@test
+#@test   # passing parameters to programs is no longer supported
 def pass_constant_values():
     t = parse_and_run_tests("""
         #program fact_maker(n).
@@ -240,7 +120,7 @@ def pass_constant_values():
     test.eq(('test_fact_4', {'asserts': {'assert(four)', 'assert(models(1))'}, 'models': 1}), next(t))
 
 
-#@test
+@test
 def warn_for_disjunctions():
     t = parse_and_run_tests("""
         time(0; 1).
@@ -248,10 +128,11 @@ def warn_for_disjunctions():
         assert(@all(time_exists)) :- time(T).
         assert(@models(1)).
      """)
+    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
     test.eq(('test_base', {'asserts': {'assert(models(1))', 'assert(time_exists)'}, 'models': 1}), next(t))
 
 
-#@test
+@test
 def format_empty_model():
     r = parse_and_run_tests("""
         #program test_model_formatting.
@@ -264,7 +145,7 @@ MODEL:
         next(r)
 
 
-#@test
+@test
 def format_model_small():
     import unittest.mock as mock
     r = parse_and_run_tests("""
@@ -281,7 +162,7 @@ this_is_a_fact(2)  """):
             next(r)
 
 
-#@test
+@test
 def format_model_wide():
     import unittest.mock as mock
     r = parse_and_run_tests("""
@@ -447,7 +328,7 @@ def tester_basics():
     """)
     next(t)
 
-#@test
+@test
 def ensure_iso_python_call():
     t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(42).  ensure(assert("a")).')
     try:
@@ -459,7 +340,7 @@ def ensure_iso_python_call():
     test.eq(('base', {'asserts': {'assert("a")'}, 'models': 1}), next(t))
 
 
-#@test
+@test
 def alternative_models_predicate():
     t = parse_and_run_tests("""
         assert(1).
@@ -510,13 +391,14 @@ def NO_warning_about_duplicate_assert_2():
         assert(@all("precondition"))  :-  { precondition(0, 144, voeding) } = 0.
         assert(@models(1)).
      """)
+    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
     test.eq([('test_one_1', {'asserts': {'assert("precondition")', 'assert(models(1))'}, 'models': 1})], list(t))
 
 
 @test
 def do_not_report_on_base_without_any_asserts():
     t = parse_and_run_tests("some. stuff.")
-    #test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
+    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
     test.eq([], list(t))
 
 
@@ -530,6 +412,7 @@ def assert_with_any():
         assert(@all(ab)) :- { a; b } = 1.
         assert(@models(2)).
      """)
+    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
     test.eq(('test_one', {'asserts': {'assert(ab)', 'assert(models(2))'}, 'models': 2}), next(t))
 
 

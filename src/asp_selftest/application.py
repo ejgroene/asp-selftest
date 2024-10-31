@@ -33,6 +33,18 @@ class DefaultHook:
     def __init__(self, programs):
         self._programs = [(p, ()) for p in programs or ()]
 
+    def _add_processor(this, self, p, ctl):
+        print("Inserting processor:", p, file=sys.stderr)
+        modulename, classname = p.split(':')
+        mod = importlib.import_module(modulename)
+        processor_class = getattr(mod, classname)
+        processor = processor_class(self)
+        for m in ('message_limit', 'main', 'parse'):
+            assert not hasattr(processor, m), f"{m!r} of {p} can never be called."
+        self.delegates.insert(-1, processor)   # TODO we should not know about delegetes here!
+        # unless we make it an API, which is not a crazy idea, because we are part of the 
+        # collective, and extending it makes sense (we're also the defaul/system hook....)
+
     def message_limit(this, self):
         return 10
 
@@ -47,14 +59,7 @@ class DefaultHook:
     def parse(this, self, ctl, files, on_ast):
         def add(ast):
             if p := is_processor_predicate(ast):
-                print("Inserting processor:", p)
-                modulename, classname = p.split(':')
-                mod = importlib.import_module(modulename)
-                processor_class = getattr(mod, classname)
-                processor = processor_class(self, ctl)
-                for m in ('message_limit', 'main', 'parse'):
-                    assert not hasattr(processor, m), f"{m!r} of {p} can never be called."
-                self.delegates.insert(-1, processor)
+                this._add_processor(self, p, ctl)
             on_ast(ast)
         clingo.ast.parse_files(files, callback=add, logger=self.logger, message_limit=self.message_limit)
 
@@ -221,7 +226,7 @@ def hook_basics(tmp_path):
 
 # for testing hooks
 class TestHaak:
-    def __init__(self, app, control):
+    def __init__(self, app):
         pass
     def ground(this, self, ctl, parts, context):
         ctl.add('testhook(ground).')
@@ -244,7 +249,7 @@ def add_hook_in_ASP(tmp_path, stdout):
 
 # for testing hooks
 class TestHook2:
-    def __init__(self, app, control):
+    def __init__(self, app):
         pass
     def message_limit(self, prev):
         pass  # pragma no cover

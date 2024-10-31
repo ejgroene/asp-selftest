@@ -18,8 +18,19 @@ def main():
     args = parse()
     #if not args.full_trace:
     #    sys.tracebacklimit = 0
-    from .runasptests import run_asp_tests
     run_asp_tests(*args.lpfile, base_programs=args.programs, hooks=args.processor)
+
+
+# old stuff to keep old main alive for a while
+def run_asp_tests(*files, base_programs=(), hooks=()):
+    for program_file in files:
+        name = getattr(program_file, 'name', str(program_file))
+        print(f"Reading {name}.", flush=True)
+        asp_code = program_file.read()
+        from .runasptests2 import parse_and_run_tests
+        from .tester import print_test_result
+        for name, result in parse_and_run_tests(asp_code, base_programs, hooks=hooks):
+            print_test_result(name, result)  # TODO doesn't parse_and_run_tests already call print_test_result?
 
 
 # this function is directly executed by pip installed code wrapper, see pyproject.toml
