@@ -2,6 +2,7 @@ import traceback
 import re
 import os
 import math
+import pathlib
 
 import clingo
 
@@ -79,10 +80,12 @@ def warn2raise(lines, label, errors, code, msg):
         file, line, start, end, key, msg, more = messages[0]
         if file == '<block>':
             name = repr(label) if label else "ASP code"
-            srclines = lines
-        else:
+            srclines = lines if lines else []
+        elif pathlib.Path(file).exists():
             name = file
             srclines = [l.removesuffix('\n') for l in open(file).readlines()]
+        else:
+            srclines = []
         w = 1
         max_lineno = len(srclines)
         nr_width = 1 + int(math.log10(max_lineno)) if max_lineno > 0 else 0

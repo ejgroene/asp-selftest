@@ -75,6 +75,8 @@ class DefaultHook:
     def print_model(this, self, model, printer):
         printer()
 
+    def check(this, self):
+        pass
 
 
 class MainApp(Application, contextlib.AbstractContextManager):

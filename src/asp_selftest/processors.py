@@ -36,8 +36,10 @@ def save_exception(f):
             return f(self, *a, **k)
         except RuntimeError as e:
             # uncomment when you loose errors during use
-            #print(f"{f.__qualname__} got exception:", e)
-            assert len(self.exceptions) == 1
+            #print(f"{f.__qualname__} got exception:", type(e), e, file=sys.stderr)
+            if self.exceptions:
+                raise Stop(f.__qualname__)
+            assert len(self.exceptions) == 1, self.exceptions
     return wrap
 
 
@@ -53,7 +55,7 @@ class SyntaxErrors:
     def main(this, self, ctl, files):
         try:
             self.main(ctl, files)
-        except Stop:
+        except Stop as e:
             #raise this.exceptions[0] from None
             pass
         finally:
@@ -63,37 +65,31 @@ class SyntaxErrors:
     @save_exception
     def parse(this, self, ctl, files, on_ast):
         self.parse(ctl, files, on_ast)
-        if this.exceptions:
-            raise Stop
 
     @save_exception
     def load(this, self, ctl, ast):
         self.load(ctl, ast)
-        if this.exceptions:
-            raise Stop
 
     @save_exception
     def ground(this, self, ctl, parts, context):
         self.ground(ctl, parts, context)
-        if this.exceptions:
-            raise Stop
 
     @save_exception
     def solve(this, self, control, *a, **k):
         self.solve(control, *a , **k)
-        if this.exceptions:
-            raise Stop
 
     def logger(this, self, code, message):
         results = self.logger(code, message)
         if results:
-            label = '<stdin>'
-            warn2raise(None, label, this.exceptions, *results)
+            if len(this.exceptions) > 0:
+                print("  ======== ALREADY exception:", this.exceptions, file=sys.stderr)
+                print("               while logging:", message, file=sys.stderr)
+            warn2raise(None, None, this.exceptions, *results)
 
     def check(this, self):
         if this.exceptions:
             if len(this.exceptions) > 1:
-                print("================= multiple exceptions =============")
+                print("================= multiple exceptions =============", file=sys.stderr)
                 for e in this.exceptions:
-                    print(e)
-            raise this.exceptions[-1] from None
+                    print(e, file=sys.stderr)
+            raise this.exceptions[0]

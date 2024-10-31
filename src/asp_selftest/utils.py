@@ -42,6 +42,10 @@ def find_locals():
     def f():
         l = 2
         test.eq([1], list(locals('l')))
+        def g():
+            l= 3
+            test.eq([2, 1], list(locals('l')))
+        g()
     f()
 
 

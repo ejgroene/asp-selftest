@@ -4,9 +4,7 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
-from .runasptests import (run_asp_tests,
-                          read_programs,
-                          print_test_result,
+from .runasptests import (print_test_result,
                           prog_with_dependencies,
                           Tester as OrgTester)
 
@@ -19,6 +17,9 @@ class CompoundContext:
     def __init__(self, *contexts):
         self._contexts = contexts
 
+    def add_context(self, *context):
+        self._contexts += context
+
     def __getattr__(self, name):
         for c in self._contexts:
             if f := getattr(c, name, None):
@@ -28,9 +29,10 @@ class CompoundContext:
 
 class TesterHook:
 
-    def __init__(this):
+    def __init__(this, on_report=print_test_result):
         this.programs = {}
         this.ast = []   # we keep a copy of the ast to load it for each test
+        this.on_report = on_report
 
 
     def parse(this, self, ctl, files, on_ast):
@@ -51,12 +53,12 @@ class TesterHook:
             try:
                 tester = OrgTester()
                 # play nice with other hooks; maybe also add original arguments?
-                control = clingo.Control(logger=self.logger, message_limit=self.message_limit)
+                control = clingo.Control(['0'], logger=self.logger, message_limit=self.message_limit)
                 control.register_observer(tester)
                 self.load(control, this.ast)
                 self.ground(control, parts, context=CompoundContext(tester, context))
                 self.solve(control, on_model=tester.on_model)
-                print_test_result(prog_name, tester.report())
+                this.on_report(prog_name, tester.report())
             except Exception as e:
                 e.add_note(f"Error while running:  {prog_name}.")
                 raise e from None
