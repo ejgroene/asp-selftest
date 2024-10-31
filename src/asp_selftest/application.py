@@ -12,7 +12,7 @@ from clingo.script import enable_python
 enable_python()
 
 
-from .utils import is_processor_predicate, delegate, find_locals, guard as clingo_defined
+from .utils import is_processor_predicate, delegate, find_locals, guard as clingo_called
 
 
 import selftest
@@ -109,22 +109,22 @@ class MainApp(Application, contextlib.AbstractContextManager):
 
     @property
     @delegate
-    @clingo_defined
+    @clingo_called
     def message_limit(self):
         raise NotImplementedError("message_limit")  # pragma no cover
 
     @delegate
-    @clingo_defined
+    @clingo_called
     def logger(self, code, message):
         raise NotImplementedError("logger")  # pragma no cover
 
     @delegate
-    @clingo_defined
+    @clingo_called
     def print_model(self, model, printer):
         raise NotImplementedError("print_model")  # pragma no cover
 
     @delegate
-    @clingo_defined
+    @clingo_called
     def main(self, ctl, files):
         raise NotImplementedError("main")  # pragma no cover
 

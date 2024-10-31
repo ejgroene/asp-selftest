@@ -1,19 +1,18 @@
 
 """ Program argument and in-source test handling + some tests that introduce cyclic dependencies elsewhere. """
 
-import argparse
 import io
 
 from clingo import Control
 
-from .arguments import parse, parse_silent, maybe_silence_tester
+from .arguments import parse, maybe_silence_tester
 from .__main__ import main, clingo_plus_tests
 from .application import MainApp
 from .processors import SyntaxErrors
 from .tester import TesterHook
-from .runasptests2 import parse_and_run_tests, ground_exc
+from .runasptests import parse_and_run_tests, ground_exc
 
-from .tester import local, register, format_symbols
+from .tester import local, register
 
 
 import selftest

@@ -14,7 +14,6 @@ import asp_selftest.application
 import asp_selftest.processors
 import asp_selftest.moretests
 import asp_selftest.runasptests
-import asp_selftest.runasptests2
 
 
 c.stop()
