@@ -45,4 +45,12 @@ def clingo_plus_tests():
     from .processors import SyntaxErrors
     from .tester import TesterHook
     main_main(opts.programs, remaining, hooks=[TesterHook(), SyntaxErrors()])
+    #import cProfile
+    #import pstats
+    #with cProfile.Profile() as p:
+    #    main_main(opts.programs, remaining, hooks=[TesterHook(), SyntaxErrors()])
+    #    s = pstats.Stats(p, stream=sys.stderr)
+    #    s.sort_stats('cumulative')
+    #    s.print_stats(.01)
+
 

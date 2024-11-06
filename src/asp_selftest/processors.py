@@ -36,7 +36,7 @@ def save_exception(f):
             return f(self, *a, **k)
         except RuntimeError as e:
             # uncomment when you loose errors during use
-            #print(f"{f.__qualname__} got exception:", type(e), e, file=sys.stderr)
+            print(f"{f.__qualname__} got exception:", type(e), e, file=sys.stderr)
             if self.exceptions:
                 assert len(self.exceptions) == 1, self.exceptions
                 raise Stop(f.__qualname__)
@@ -59,7 +59,7 @@ class SyntaxErrors:
             self.main(ctl, files)
         except Stop as e:
             #raise this.exceptions[0] from None
-            pass
+            return
         finally:
             #this.exceptions.clear()
             pass
@@ -87,8 +87,10 @@ class SyntaxErrors:
                 print("  ======== ALREADY exception:", this.exceptions, file=sys.stderr)
                 print("               while logging:", message, file=sys.stderr)
             warn2raise(None, None, this.exceptions, *results)
+        return results
 
     def check(this, self):
+        # TODO play nice with other hooks
         if this.exceptions:
             if len(this.exceptions) > 1:
                 print("================= multiple exceptions =============", file=sys.stderr)

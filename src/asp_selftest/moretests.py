@@ -3,6 +3,7 @@
 
 import io
 
+import clingo
 from clingo import Control
 
 from .arguments import parse, maybe_silence_tester
@@ -11,6 +12,7 @@ from .application import MainApp
 from .processors import SyntaxErrors
 from .tester import TesterHook
 from .runasptests import parse_and_run_tests, ground_exc
+from .utils import find_symbol
 
 from .tester import local, register
 
@@ -251,3 +253,28 @@ assert(@models(1)).
     s = stdout.getvalue()
     test.contains(s, "ASPUNIT: test_one:  2 asserts,  1 model")
     #test.contains(s, 'assert(models(1)) assert("hello")')
+
+
+@test.fixture
+def asp(code, name):
+    name.write_text(code)
+    yield name.as_posix()
+
+
+@test
+def multiple_bases_must_not_fail_with_duplicate_base(tmp_path):
+    ast = []
+    with test.asp('g.', tmp_path/'g.lp') as g, \
+         test.asp(f'#include "{g}". f.', tmp_path/'f.lp') as f:
+            clingo.ast.parse_files([f], ast.append)
+    test.eq(4, len(ast))
+    test.eq('#program base.', str(ast[0]))  # both f.lp and g.lp have a base
+    test.eq('g.',             str(ast[1]))
+    test.eq('#program base.', str(ast[2]))  # both f.lp and g.lp have a base
+    test.eq('f.',             str(ast[3]))
+    a = MainApp(hooks=[TesterHook()])
+    c = Control()
+    a.main(c, [f])
+    a.check()
+    test.eq('g', find_symbol(c, "g"))
+

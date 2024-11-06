@@ -1,3 +1,4 @@
+import sys
 import clingo
 import functools
 import inspect
@@ -6,6 +7,10 @@ import traceback
 
 import selftest
 test = selftest.get_tester(__name__)
+
+
+def find_symbol(ctl, name, arity=0):
+    return str(next(ctl.symbolic_atoms.by_signature(name, arity)).symbol)
 
 
 def is_processor_predicate(p):

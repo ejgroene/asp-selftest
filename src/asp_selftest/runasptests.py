@@ -22,7 +22,7 @@ default = lambda p: tuple(p) == (('base', ()), )
 
 def ground_exc(program, label='ASP-code', arguments=[], parts=(('base', ()),),
                observer=None, context=None, extra_src=None,
-               control=None,
+               control=None, trace=None,
                hooks=()):
     """ grounds an aps program turning messages/warnings into SyntaxErrors
         it also solves; the function name is legacy
@@ -38,7 +38,7 @@ def ground_exc(program, label='ASP-code', arguments=[], parts=(('base', ()),),
     with tempfile.NamedTemporaryFile(mode='w', suffix=f"-{label}.lp") as f:
         f.write(program if isinstance(program, str) else '\n'.join(program))
         f.seek(0)
-        with MainApp(hooks=list(hooks) + [SyntaxErrors(), Haak()]) as app:
+        with MainApp(trace=trace, hooks=list(hooks) + [SyntaxErrors(), Haak()]) as app:
             ctl = clingo.Control(arguments, logger=app.logger, message_limit=app.message_limit)
             if extra_src:
                 ctl.add(extra_src)
@@ -316,6 +316,23 @@ def multiline_error():
                                              ^ 'N' is unsafe
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  geel(R):-[#inc_base];iets_vrij(S);(S,T,N)=R;R=(S,T,N).
     4             %%%%""", e.exception.text)
+
+
+class LoggingHook:
+    def __init__(this, app):
+        pass
+    def ground(this, self, *_):
+        self.trace("log-haak", today="sunny")
+
+@test
+def processor_tracer():
+    args = []
+    def trace(*msg, **data):
+        args.append((msg, data))
+    ground_exc('processor("asp_selftest.runasptests:LoggingHook"). a.',
+               trace=trace)
+    test.eq([(('log-haak',), {'today': 'sunny'})], args)
+    ground_exc('processor("asp_selftest.runasptests:LoggingHook"). a.') # no tracer
 
 
 @test

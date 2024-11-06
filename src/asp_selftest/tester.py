@@ -103,7 +103,7 @@ sys.modules['__main__'].register = register
 
 class Tester:
 
-    def __init__(self, name=None):
+    def __init__(self, name):
         self.reset(name)
 
 
@@ -186,9 +186,14 @@ class Tester:
         models = self._models_ist
         if not self._asserts:
             return {'asserts': set(), 'models': models}
-        assert models > 0, f"{self._name}: no models found."
+        if self._name != 'base':
+            # in 'base' all asserts are for @all models and (@any is not allowed; TODO)
+            # also, with 'base' we can have 0 or more models, which are not checked
+            # because 'base' can be included elsewhere, and that context can influence
+            # the number of models found.
+            assert models > 0, f"{self._name}: no models found."
+            assert models == self._models_soll, f"Expected {self._models_soll} models, found {models}."
         assert not self._anys, f"Asserts not in any of the {models} models:{CR}{CR.join(str(a) for a in self._anys)}"
-        assert models == self._models_soll, f"Expected {self._models_soll} models, found {models}."
         return dict(asserts={str(a) for a in self._asserts}, models=models)
 
 
@@ -240,13 +245,14 @@ class TesterHook:
         this.programs = {}
         this.ast = []   # we keep a copy of the ast to load it for each test
         this.on_report = on_report
+        this.quit = False
 
 
     def parse(this, self, ctl, files, on_ast):
         def filter(a):
             if p := is_program(a):
                 name, dependencies = p
-                if name in this.programs:
+                if name in this.programs and name != 'base':
                     raise Exception(f"Duplicate program name: {name!r}")
                 this.programs[name] = [(d, []) for d in dependencies]
             on_ast(a)
@@ -255,23 +261,43 @@ class TesterHook:
 
 
     def ground(this, self, ctl, base_parts, context):
+        this.quit = False # TODO thing about something not on state of this
         for prog_name, dependencies in this.programs.items():
-            if not(prog_name.startswith('test_') or prog_name == 'base'):
+            if prog_name.startswith('test_'):  # TODO better test
+                parts = base_parts + list(prog_with_dependencies(this.programs, prog_name, dependencies))
+            elif prog_name == 'base':  # TODO better test
+                parts = (('base', ()),)
+            else:
                 continue
-            parts = base_parts + list(prog_with_dependencies(this.programs, prog_name, dependencies))
             try:
-                tester = Tester()
+                tester = Tester(prog_name)
                 # play nice with other hooks; maybe also add original arguments?
                 control = clingo.Control(['0'], logger=self.logger, message_limit=self.message_limit)
                 control.register_observer(tester)
                 self.load(control, this.ast)
+                if this.quit:
+                    print("   QUIT 1  ", file=sys.stderr)
+                    raise RuntimeError # TODO testme; Clingo logs errors but does not (always) raise
                 self.ground(control, parts, context=CompoundContext(tester, context))
+                if this.quit:
+                    print("   QUIT 2  ", file=sys.stderr)
+                    raise RuntimeError
                 self.solve(control, on_model=tester.on_model)
+                if this.quit:
+                    print("   QUIT 3  ", file=sys.stderr)
+                    raise RuntimeError
                 this.on_report(prog_name, tester.report())
             except Exception as e:
                 e.add_note(f"Error while running:  {prog_name}.")
                 raise e from None
         self.ground(ctl, base_parts, context)
+
+    def logger(this, self, code, message):
+        # we quit after the first error/warning/message
+        result = self.logger(code, message)
+        if result:  # TODO Testme; allow others to suppress error
+            this.quit = True
+        return result
 
 
 from clingo.ast import ASTType
@@ -296,3 +322,14 @@ def we_CAN_NOT_i_repeat_NOT_reuse_control():
     # p(1) should be gone
     test.eq(['a', 'p(1)', 'p(2)'], [str(s.symbol) for s in c.symbolic_atoms])
 
+
+@test
+def report_not_for_base_model_count():
+    t = Tester('harry')
+    t._asserts['an'] = 'assert'
+    with test.raises(AssertionError, 'harry: no models found.'):
+        t.report()
+    t = Tester('base')
+    t._asserts['assert1'] = 'assert'
+    r = t.report()
+    test.eq({'asserts': {'assert1'}, 'models': 0}, r)

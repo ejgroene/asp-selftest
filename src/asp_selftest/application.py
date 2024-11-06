@@ -12,7 +12,7 @@ from clingo.script import enable_python
 enable_python()
 
 
-from .utils import is_processor_predicate, delegate, find_locals, guard as clingo_called
+from .utils import is_processor_predicate, delegate, find_locals, guard as clingo_called, find_symbol
 
 
 import selftest
@@ -66,7 +66,12 @@ class DefaultHook:
     def load(this, self, ctl, ast):
         with clingo.ast.ProgramBuilder(ctl) as pb:
             for a in ast:
-                pb.add(a)
+                try:
+                    pb.add(a)
+                except Exception as e:
+                    e.add_note(str(a))
+                    raise e from None
+
 
     def ground(this, self, ctl, parts, context):
         ctl.ground(parts, context=context)
@@ -102,9 +107,10 @@ class MainApp(Application, contextlib.AbstractContextManager):
         we collect exceptions and raise them afterwards in check().
     """
 
-    def __init__(self, programs=None, hooks=()):
+    def __init__(self, programs=None, hooks=(), trace=None):
         self.delegates = list(hooks) + [DefaultHook(programs)]
         self.program_name = "clingo+tests"
+        self.trace = trace or (lambda *a, **k: None)
         Application.__init__(self)
 
     @property
@@ -150,10 +156,6 @@ class MainApp(Application, contextlib.AbstractContextManager):
 
     def __exit__(self, exc_type, exc_value, traceback):
         return self.check()
-
-
-def find_symbol(ctl, name, arity=0):
-    return str(next(ctl.symbolic_atoms.by_signature(name, arity)).symbol)
 
 
 @test
@@ -291,4 +293,5 @@ def multiple_hooks(tmp_path):
     test.eq('boe', find_symbol(ctl, "boe"))
     test.eq('hook_1', find_symbol(ctl, "hook_1"))
     test.eq('hook_2', find_symbol(ctl, "hook_2"))
+
 
