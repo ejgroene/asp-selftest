@@ -139,9 +139,10 @@ def format_empty_model():
         #external what.
         assert(@all(test)) :- what.
     """)
-    with test.raises(AssertionError, """FAILED: assert(test)
-MODEL:
-<empty>"""):
+    with test.raises(AssertionError, """MODEL:
+<empty>
+#program test_model_formatting() FAILED assertions: assert(test)
+Test Failure. Model printed above."""):
         next(r)
 
 
@@ -154,10 +155,11 @@ def format_model_small():
         #external what.
         assert(@all(test)) :- what.
     """)
-    with test.raises(AssertionError, """FAILED: assert(test)
-MODEL:
+    with test.raises(AssertionError, """MODEL:
 this_is_a_fact(1)
-this_is_a_fact(2)"""):  
+this_is_a_fact(2)
+#program test_model_formatting() FAILED assertions: assert(test)
+Test Failure. Model printed above."""):  
         with mock.patch("shutil.get_terminal_size", lambda _: (37,20)):
             next(r)
 
@@ -171,10 +173,11 @@ def format_model_wide():
         #external what.
         assert(@all(test)) :- what.
     """)
-    with test.raises(AssertionError, """FAILED: assert(test)
-MODEL:
+    with test.raises(AssertionError, """MODEL:
 this_is_a_fact(1)  this_is_a_fact(2)
-this_is_a_fact(3)"""):  
+this_is_a_fact(3)
+#program test_model_formatting() FAILED assertions: assert(test)
+Test Failure. Model printed above."""):  
         with mock.patch("shutil.get_terminal_size", lambda _: (38,20)):
             next(r)
 
@@ -352,7 +355,7 @@ def ensure_iso_python_call():
         next(t)
         test.fail("should raise")  # pragma no cover
     except AssertionError as e:
-        test.contains(str(e), 'FAILED: assert("a")')
+        test.contains(str(e), 'FAILED assertions: assert("a")')
     t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(2).  ensure(assert("a")).')
     test.eq(('base', {'asserts': {'assert("a")'}, 'models': 1}), next(t))
 

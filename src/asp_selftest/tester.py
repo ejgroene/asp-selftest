@@ -187,7 +187,10 @@ class Tester:
         failures = [a for a in self._asserts if not model.contains(a)]
         if failures:
             modelstr = format_symbols(model.symbols(shown=True))
-            self.failures.append(AssertionError(f"FAILED: {', '.join(map(str, failures))}\nMODEL:\n{modelstr}"))
+            self.failures.append(AssertionError(
+                f"MODEL:\n{modelstr}\n"
+                f"#program {self._name}() FAILED assertions: {', '.join(map(str, failures))}\n"
+                f"Test Failure. Model printed above."))
             return False
         return True
 
@@ -283,27 +286,23 @@ class TesterHook:
                 parts = (('base', ()),)
             else:
                 continue
-            try:
-                tester = Tester(prog_name)
-                # play nice with other hooks; maybe also add original arguments?
-                control = clingo.Control(['0'], logger=self.logger, message_limit=self.message_limit)
-                control.register_observer(tester)
-                self.load(control, this.ast)
-                if this.quit:
-                    print("   QUIT 1  ", file=sys.stderr)
-                    raise RuntimeError # TODO testme; Clingo logs errors but does not (always) raise
-                self.ground(control, parts, context=CompoundContext(tester, context))
-                if this.quit:
-                    print("   QUIT 2  ", file=sys.stderr)
-                    raise RuntimeError
-                self.solve(control, on_model=tester.on_model)
-                if this.quit:
-                    print("   QUIT 3  ", file=sys.stderr)
-                    raise RuntimeError
-                this.on_report(prog_name, tester.report())
-            except Exception as e:
-                e.add_note(f"Error while running:  {prog_name}.")
-                raise e from None
+            tester = Tester(prog_name)
+            # play nice with other hooks; maybe also add original arguments?
+            control = clingo.Control(['0'], logger=self.logger, message_limit=self.message_limit)
+            control.register_observer(tester)
+            self.load(control, this.ast)
+            if this.quit:
+                print("   QUIT 1  ", file=sys.stderr)
+                raise RuntimeError # TODO testme; Clingo logs errors but does not (always) raise
+            self.ground(control, parts, context=CompoundContext(tester, context))
+            if this.quit:
+                print("   QUIT 2  ", file=sys.stderr)
+                raise RuntimeError
+            self.solve(control, on_model=tester.on_model)
+            if this.quit:
+                print("   QUIT 3  ", file=sys.stderr)
+                raise RuntimeError
+            this.on_report(prog_name, tester.report())
         self.ground(ctl, base_parts, context)
 
     def logger(this, self, code, message):
