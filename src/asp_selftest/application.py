@@ -19,10 +19,10 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
-def main_main(programs, remaining, hooks):
+def main_main(programs, arguments, hooks):
     programs and print("Grounding programs:", programs)
     with MainApp(programs=programs, hooks=hooks) as app:
-        clingo_main(app, remaining)
+        clingo_main(app, arguments)
 
 
 class DefaultHook:

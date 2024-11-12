@@ -156,8 +156,8 @@ def format_model_small():
     """)
     with test.raises(AssertionError, """FAILED: assert(test)
 MODEL:
-this_is_a_fact(1)  
-this_is_a_fact(2)  """):  
+this_is_a_fact(1)
+this_is_a_fact(2)"""):  
         with mock.patch("shutil.get_terminal_size", lambda _: (37,20)):
             next(r)
 
@@ -173,8 +173,8 @@ def format_model_wide():
     """)
     with test.raises(AssertionError, """FAILED: assert(test)
 MODEL:
-this_is_a_fact(1)  this_is_a_fact(2)  
-this_is_a_fact(3)  """):  
+this_is_a_fact(1)  this_is_a_fact(2)
+this_is_a_fact(3)"""):  
         with mock.patch("shutil.get_terminal_size", lambda _: (38,20)):
             next(r)
 

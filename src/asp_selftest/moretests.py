@@ -13,6 +13,7 @@ from .processors import SyntaxErrors
 from .tester import TesterHook
 from .runasptests import parse_and_run_tests, ground_exc
 from .utils import find_symbol
+from .application import main_main
 
 from .tester import local, register
 
@@ -260,6 +261,11 @@ def asp(code, name):
     name.write_text(code)
     yield name.as_posix()
 
+@test.fixture
+def with_asp(tmp_path, code, name):
+    fname = tmp_path/name
+    fname.write_text(code)
+    yield fname.as_posix()
 
 @test
 def multiple_bases_must_not_fail_with_duplicate_base(tmp_path):
@@ -277,4 +283,9 @@ def multiple_bases_must_not_fail_with_duplicate_base(tmp_path):
     a.main(c, [f])
     a.check()
     test.eq('g', find_symbol(c, "g"))
+
+#@test
+def test_main_main(with_asp:("fail", 'f')):
+    with test.raises(SystemExit, -1):
+        main_main(['base'], [with_asp], [])
 

@@ -6,6 +6,7 @@ import itertools
 import clingo
 import threading
 import inspect
+import unittest.mock as mock
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -33,38 +34,6 @@ def prog_with_dependencies(programs, name, dependencies):
         yield dep, [clingo.Number(a) for a in args]
 
 
-def format_symbols(symbols):
-    symbols = sorted(str(s) for s in symbols)
-    if len(symbols) > 0:
-        col_width = (max(len(w) for w in symbols)) + 2
-        width, h = shutil.get_terminal_size((120, 20))
-        cols = width // col_width
-        modelstr = '\n'.join(
-                ''.join(s.ljust(col_width) for s in b)
-            for b in batched(symbols, max(cols, 1)))
-    else:
-        modelstr = "<empty>"
-    return modelstr
-
-
-def create_assert(*args):
-    if len(args) > 1:
-        args = clingo.Function('', args)
-    else:
-        args = args[0]
-    return args, clingo.Function("assert", (args,))
-
-
-@test
-def create_some_asserts():
-    Number = clingo.Number
-    Function = clingo.Function
-    test.eq((Number(3), Function('assert', [Number(3)])),
-            create_assert(Number(3)))
-    test.eq((Function('', [Number(4), Number(2)]), Function('assert', [Function('', [Number(4), Number(2)])])),
-            create_assert(Number(4), Number(2)))
-
-
 CR = '\n' # trick to support old python versions that do not accecpt \ in f-strings
 def batched(iterable, n):
     """ not in python < 3.12 """
@@ -85,6 +54,51 @@ def batch_it():
     test.eq([(1,2), (3,)], list(batched([1,2,3], 2)))
     with test.raises(ValueError, 'n must be at least one'):
         list(batched([], 0))
+
+
+def format_symbols(symbols):
+    symbols = sorted(str(s).strip() for s in symbols)
+    if len(symbols) > 0:
+        col_width = (max(len(w) for w in symbols)) + 2
+        width, h = shutil.get_terminal_size((120, 20))
+        cols = width // col_width
+        modelstr = '\n'.join(
+                ''.join(s.ljust(col_width) for s in b).strip()
+            for b in batched(symbols, max(cols, 1)))
+    else:
+        modelstr = "<empty>"
+    return modelstr
+
+
+@test
+def format_symbols_basic():
+    test.eq('a', format_symbols(['a']))
+    test.eq('a  b  c  d', format_symbols(['a', 'b', 'c', 'd']))
+    test.eq('a  b  c  d', format_symbols([' a  ', '\tb', '\nc\n', '  d '])) # strip
+    with mock.patch("shutil.get_terminal_size", lambda _: (10,20)):
+        test.eq('a  b  c\nd', format_symbols(['a', 'b', 'c', 'd']))
+    with mock.patch("shutil.get_terminal_size", lambda _: (8,20)):
+        test.eq('a  b\nc  d', format_symbols(['a', 'b', 'c', 'd']))
+    with mock.patch("shutil.get_terminal_size", lambda _: (4,20)):
+        test.eq('a\nb\nc\nd', format_symbols(['a', 'b', 'c', 'd']))
+
+
+def create_assert(*args):
+    if len(args) > 1:
+        args = clingo.Function('', args)
+    else:
+        args = args[0]
+    return args, clingo.Function("assert", (args,))
+
+
+@test
+def create_some_asserts():
+    Number = clingo.Number
+    Function = clingo.Function
+    test.eq((Number(3), Function('assert', [Number(3)])),
+            create_assert(Number(3)))
+    test.eq((Function('', [Number(4), Number(2)]), Function('assert', [Function('', [Number(4), Number(2)])])),
+            create_assert(Number(4), Number(2)))
 
 
 local = threading.local()

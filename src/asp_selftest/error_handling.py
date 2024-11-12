@@ -1,6 +1,7 @@
 import traceback
 import re
 import os
+import sys
 import math
 import pathlib
 
@@ -109,6 +110,9 @@ def warn2raise(lines, label, errors, code, msg):
         traceback.print_exc()
         exit(-1)
 
+
+# #TODO TEST: hoe zien we het block (reified?)
+# None None MessageCode.RuntimeError <block>:1:19-20: error: syntax error, unexpected (
 
 # NB: most tests dor warn2raise are still in runasptests.py, indirectly checking for SyntaxError's
 @test
