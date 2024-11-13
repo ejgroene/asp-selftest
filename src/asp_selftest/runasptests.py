@@ -321,6 +321,23 @@ def multiline_error():
     4             %%%%""", e.exception.text)
 
 
+@test
+def duplicate_const():
+    with test.raises(AspSyntaxError, "redefinition of constant:  #const a=43.") as e:
+        ground_exc("""
+            #const a = 42.
+            #const a = 43.
+            """, parts=[('base', ()), ('p1', ()), ('p2', ())])
+    test.endswith(e.exception.filename, '-ASP-code.lp')
+    test.eq(3, e.exception.lineno)
+    test.eq("""    1 
+    2             #const a = 42.
+                  ^^^^^^^^^^^^^^ constant also defined here
+    3             #const a = 43.
+                  ^^^^^^^^^^^^^^ redefinition of constant:  #const a=43.
+    4             """, e.exception.text, diff=test.diff)
+
+
 class LoggingHook:
     def __init__(this, app):
         pass

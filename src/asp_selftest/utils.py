@@ -58,15 +58,13 @@ def delegate(function):
     """ Decorator for delegating methods to processors """
     @functools.wraps(function)
     def dispatch(self, *args, **kwargs):
-        __mark__ = 1
-        for obj in self.delegates:
-            if handler := getattr(obj, function.__name__, None):
+        for this in self.delegates:
+            if handler := getattr(this, function.__name__, None):
                 if handler in locals('handler'):
                     continue
                 return handler(self, *args, **kwargs)
         seen = ', '.join(sorted(set(l.__qualname__ for l in locals('handler'))))
         raise AttributeError(f"No more {function.__name__!r} found after: {seen}")
-    active = dispatch
     return dispatch
 
 
