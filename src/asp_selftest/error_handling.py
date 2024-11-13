@@ -70,13 +70,12 @@ def parse_clingo_error_messages():
 
 
 
-def warn2raise(lines, label, errors, code, msg):
+def warn2raise(lines, label, code, msg):
     """ Clingo calls this, but can't handle exceptions well, so we wrap everything. """
     try:
         # deal with '<cmd>' (command line) error messages separately
         if msg and msg.startswith('<cmd>'):
-            errors.append(RuntimeError(msg))
-            return
+            return RuntimeError(msg)
         messages = parse_message(msg)
         file, line, start, end, key, msg, more = messages[0]
         if file == '<block>':
@@ -103,8 +102,7 @@ def warn2raise(lines, label, errors, code, msg):
         if "file could not be opened" in m:
             snippet.append(f"CLINGOPATH={os.environ.get('CLINGOPATH')}")
         se = AspSyntaxError(msg + r, (name, line, None, CR.join(snippet)))
-        errors.append(se)
-        #errors.append(AspSyntaxError(f"in {name}, line {line}:{CR}{CR.join(snippet)}"))
+        return se
     except BaseException as e:
         """ unexpected exception in the code above """
         traceback.print_exc()
@@ -118,7 +116,7 @@ def warn2raise(lines, label, errors, code, msg):
 @test
 def raise_warnings_as_exceptions(stderr):
     try:
-        warn2raise(None, None, None, None, None)
+        warn2raise(None, None, None, None)
     except SystemExit as e:
         test.eq(-1, e.code)
     msg = stderr.getvalue()
@@ -127,19 +125,16 @@ def raise_warnings_as_exceptions(stderr):
 
 @test
 def deal_with_command_line_errors():
-    errors = []
-    warn2raise(None, None, errors, None, "<cmd>: all wrong!")
-    test.eq(RuntimeError, type(errors[0]))
-    test.eq(('<cmd>: all wrong!',), errors[0].args)
+    e = warn2raise(None, None, None, "<cmd>: all wrong!")
+    test.eq(RuntimeError, type(e))
+    test.eq(('<cmd>: all wrong!',), e.args)
 
 @test
 def print_clingo_path_on_file_could_not_be_opened():
     old = os.environ.get('CLINGOPATH', None)
     os.environ['CLINGOPATH'] = 'paf'
     try:
-        errors = []
-        warn2raise([], 'no-file', errors, None, "<block>:3:4-5: info: file could not be opened:\n  dus")
-        error = errors[0]
+        error = warn2raise([], 'no-file', None, "<block>:3:4-5: info: file could not be opened:\n  dus")
         test.isinstance(error, AspSyntaxError)
         test.eq("'no-file'", error.filename)
         test.eq(3, error.lineno)
@@ -154,8 +149,7 @@ def print_clingo_path_on_file_could_not_be_opened():
 @test
 def make_snippet_witg_proper_indent():
     src_lines = ['%1', '%2','%3','%4','%5','%6','%7','%8','%9','%10','error']
-    errors = []
-    warn2raise(src_lines, None, errors, 'code', "<block>:11:1-6: info: hier moet een punt staan:\n  snappie?")
+    error = warn2raise(src_lines, None, 'code', "<block>:11:1-6: info: hier moet een punt staan:\n  snappie?")
     test.eq("""     2 %2
      3 %3
      4 %4
@@ -167,4 +161,4 @@ def make_snippet_witg_proper_indent():
     10 %10
     11 error
        ^^^^^ hier moet een punt staan:  snappie?""",
-        errors[0].text, diff=test.diff)
+        error.text, diff=test.diff)

@@ -180,13 +180,23 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
 
 
 @test
+def warn_if_not_used_as_context():
+    app = MainApp(hooks=[SyntaxErrors()])
+    with test.raises(
+            AssertionError,
+            "MainApp.main must be run like: with MainApp() as m: m.main(...)") as e:
+        app.main(Control(), [])
+        app.check()
+
+
+@test
 def syntax_errors_basics(tmp_path):
     f = tmp_path/'f'
     f.write_text("a syntax error")
-    app = MainApp(hooks=[SyntaxErrors()])
     with test.raises(SyntaxError) as e:
-        app.main(Control(), [f.as_posix()])
-        app.check()
+        with MainApp(hooks=[SyntaxErrors()]) as app:
+            app.main(Control(), [f.as_posix()])
+            app.check()
     test.eq('syntax error, unexpected <IDENTIFIER>', e.exception.msg)
 
 
@@ -199,8 +209,8 @@ def tester_runs_tests(tmp_path, stdout):
     assert(@all("fact")) :- fact(a).
     assert(@models(1)).
     """)
-    app = MainApp(hooks=[TesterHook()])
-    app.main(Control(), [f.as_posix()])
+    with MainApp(hooks=[TesterHook()]) as app:
+        app.main(Control(), [f.as_posix()])
     test.eq('ASPUNIT: base:  0 asserts,  1 model\nASPUNIT: test_fact:  2 asserts,  1 model\n',
             stdout.getvalue())
 
@@ -278,10 +288,10 @@ def multiple_bases_must_not_fail_with_duplicate_base(tmp_path):
     test.eq('g.',             str(ast[1]))
     test.eq('#program base.', str(ast[2]))  # both f.lp and g.lp have a base
     test.eq('f.',             str(ast[3]))
-    a = MainApp(hooks=[TesterHook()])
     c = Control()
-    a.main(c, [f])
-    a.check()
+    with MainApp(hooks=[TesterHook()]) as a:
+        a.main(c, [f])
+        a.check()
     test.eq('g', find_symbol(c, "g"))
 
 #@test

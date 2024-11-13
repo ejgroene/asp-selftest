@@ -25,44 +25,26 @@ class PrintGroundSymbols:
         print("=== end symbols ===")
 
 
-class Stop(Exception):
-    pass
-
-
 def save_exception(f):
     @functools.wraps(f)
     def wrap(self, *a, **k):
         try:
             return f(self, *a, **k)
         except RuntimeError as e:
-            # uncomment when you loose errors during use
-            print(f"{f.__qualname__} got exception:", type(e), e, file=sys.stderr)
-            if self.exceptions:
-                assert len(self.exceptions) == 1, self.exceptions
-                raise Stop(f.__qualname__)
+            if self.exception:
+                raise self.exception
             else:
-                raise RuntimeError(f"{f.__qualname__} got {e} while no errors have ben logged.")
+                raise e
     return wrap
 
 
 class SyntaxErrors:
 
     def __init__(this):
-        this.exceptions = []
+        this.exception = None
 
     def message_limit(this, self):
         return 1
-
-    @save_exception
-    def main(this, self, ctl, files):
-        try:
-            self.main(ctl, files)
-        except Stop as e:
-            #raise this.exceptions[0] from None
-            return
-        finally:
-            #this.exceptions.clear()
-            pass
 
     @save_exception
     def parse(this, self, ctl, files, on_ast):
@@ -76,24 +58,18 @@ class SyntaxErrors:
     def ground(this, self, ctl, parts, context):
         self.ground(ctl, parts, context)
 
-    @save_exception
-    def solve(this, self, control, *a, **k):
-        self.solve(control, *a , **k)
-
     def logger(this, self, code, message):
         results = self.logger(code, message)
         if results:
-            if len(this.exceptions) > 0:
-                print("  ======== ALREADY exception:", this.exceptions, file=sys.stderr)
-                print("               while logging:", message, file=sys.stderr)
-            warn2raise(None, None, this.exceptions, *results)
+            if this.exception:
+                print("  WARNING ALREADY exception:", this.exception, file=sys.stdout)
+                print("               while logging:", message, file=sys.stdout)
+            else:
+                this.exception = warn2raise(None, None, *results)
+
         return results
 
     def check(this, self):
-        # TODO play nice with other hooks
-        if this.exceptions:
-            if len(this.exceptions) > 1:
-                print("================= multiple exceptions =============", file=sys.stderr)
-                for e in this.exceptions:
-                    print(e, file=sys.stderr)
-            raise this.exceptions[0]
+        self.check()
+        if this.exception:
+            raise this.exception

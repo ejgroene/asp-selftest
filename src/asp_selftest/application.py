@@ -94,15 +94,12 @@ class DefaultHook:
 def clingo_called(f):
     @functools.wraps(f)
     def wrap(self, *a, **k):
+        assert self._context_active, \
+            f"{f.__qualname__} must be run like: with MainApp() as m: m.{f.__name__}(...)"
         try:
-            assert self._context_active, \
-                f"{f.__qualname__} must be run like: with MainApp() as m: m.{f.__name__}(...)"
             return f(self, *a, **k)
         except Exception as e:
             self._exception = e
-            print(f"{f.__qualname__} must not raise exceptions. It did: {type(e)}", file=sys.stderr)
-            #traceback.print_exc()
-            #exit(-1)
     return wrap
 
 
@@ -135,7 +132,6 @@ class MainApp(Application, contextlib.AbstractContextManager):
     @clingo_called
     @delegate
     def message_limit(self):
-        print("HIER?")
         raise NotImplementedError("message_limit")  # pragma no cover
 
     @clingo_called
@@ -182,7 +178,7 @@ class MainApp(Application, contextlib.AbstractContextManager):
         #assert not exc_value, f"Got exception: {exc_value}"
         self._context_active = False
         if hasattr(self, "_exception"):
-            raise self._exception from None
+            raise self._exception
         return self.check()
 
 

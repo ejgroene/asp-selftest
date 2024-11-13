@@ -162,16 +162,3 @@ def delegation():
             pass
     test.eq(30, A().f())
 
-
-def XXguard(f):
-    @functools.wraps(f)
-    def wrap(*a, **k):
-        try:
-            return f(*a, **k)
-        except Exception as e:
-            print(f"{f.__qualname__} must not raise exceptions. It did.", file=sys.stderr)
-            traceback.print_exc()
-            exit(-1)
-    return wrap
-
-
