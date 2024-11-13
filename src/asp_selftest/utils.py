@@ -163,7 +163,7 @@ def delegation():
     test.eq(30, A().f())
 
 
-def guard(f):
+def XXguard(f):
     @functools.wraps(f)
     def wrap(*a, **k):
         try:

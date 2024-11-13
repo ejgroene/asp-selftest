@@ -4,6 +4,7 @@
 import sys
 import importlib
 import contextlib
+import functools
 
 import clingo
 from clingo import Control, Application, clingo_main
@@ -12,7 +13,7 @@ from clingo.script import enable_python
 enable_python()
 
 
-from .utils import is_processor_predicate, delegate, find_locals, guard as clingo_called, find_symbol
+from .utils import is_processor_predicate, delegate, find_locals, find_symbol
 
 
 import selftest
@@ -34,6 +35,7 @@ class DefaultHook:
         self._programs = [(p, ()) for p in programs or ()]
 
     def _add_processor(this, self, p, ctl):
+        #TODO check for duplicates?
         print("Inserting processor:", p, file=sys.stderr)
         modulename, classname = p.split(':')
         mod = importlib.import_module(modulename)
@@ -89,6 +91,21 @@ class DefaultHook:
         pass
 
 
+def clingo_called(f):
+    @functools.wraps(f)
+    def wrap(self, *a, **k):
+        try:
+            assert self._context_active, \
+                f"{f.__qualname__} must be run like: with MainApp() as m: m.{f.__name__}(...)"
+            return f(self, *a, **k)
+        except Exception as e:
+            self._exception = e
+            print(f"{f.__qualname__} must not raise exceptions. It did: {type(e)}", file=sys.stderr)
+            #traceback.print_exc()
+            #exit(-1)
+    return wrap
+
+
 class MainApp(Application, contextlib.AbstractContextManager):
     """ Clingo Main application.
 
@@ -111,26 +128,28 @@ class MainApp(Application, contextlib.AbstractContextManager):
         self.delegates = list(hooks) + [DefaultHook(programs)]
         self.program_name = "clingo+tests"
         self.trace = trace or (lambda *a, **k: None)
+        self._context_active = False
         Application.__init__(self)
 
     @property
-    @delegate
     @clingo_called
+    @delegate
     def message_limit(self):
+        print("HIER?")
         raise NotImplementedError("message_limit")  # pragma no cover
 
-    @delegate
     @clingo_called
+    @delegate
     def logger(self, code, message):
         raise NotImplementedError("logger")  # pragma no cover
 
-    @delegate
     @clingo_called
+    @delegate
     def print_model(self, model, printer):
         raise NotImplementedError("print_model")  # pragma no cover
 
-    @delegate
     @clingo_called
+    @delegate
     def main(self, ctl, files):
         raise NotImplementedError("main")  # pragma no cover
 
@@ -154,7 +173,16 @@ class MainApp(Application, contextlib.AbstractContextManager):
     def check(self):
         raise NotImplementedError("check")  # pragma no cover
 
+    def __enter__(self):
+        self._context_active = True
+        return self
+
     def __exit__(self, exc_type, exc_value, traceback):
+        # exceptions here could be programming errors
+        #assert not exc_value, f"Got exception: {exc_value}"
+        self._context_active = False
+        if hasattr(self, "_exception"):
+            raise self._exception from None
         return self.check()
 
 
@@ -164,11 +192,12 @@ def main_clingo_app(tmp_path):
     f.write_text("ape.")
     app = MainApp()
     test.isinstance(app, Application)
-    test.eq('clingo+tests', app.program_name)
-    test.eq(10, app.message_limit)
-    ctl = Control()
-    app.main(ctl, [f.as_posix()])
-    test.eq('ape', find_symbol(ctl, "ape"))
+    with app:
+        test.eq('clingo+tests', app.program_name)
+        test.eq(10, app.message_limit)
+        ctl = Control()
+        app.main(ctl, [f.as_posix()])
+        test.eq('ape', find_symbol(ctl, "ape"))
 
 
 @test
@@ -217,13 +246,14 @@ def hook_basics(tmp_path):
 
     th = TestHook()
     app = MainApp(hooks=[th])
-    test.eq(42, app.message_limit)
-    test.eq(43, app.main("a control", "files"))
-    test.eq(44, app.parse("a control", "files"))
-    test.eq(45, app.ground("a control", "parts", "a context"))
-    test.eq(46, app.solve("a control"))
-    test.eq(47, app.logger("a code", "a msg"))
-    test.eq(48, app.print_model("a model", "a printer"))
+    with app:
+        test.eq(42, app.message_limit)
+        test.eq(43, app.main("a control", "files"))
+        test.eq(44, app.parse("a control", "files"))
+        test.eq(45, app.ground("a control", "parts", "a context"))
+        test.eq(46, app.solve("a control"))
+        test.eq(47, app.logger("a code", "a msg"))
+        test.eq(48, app.print_model("a model", "a printer"))
 
 
 # for testing hooks
@@ -241,7 +271,8 @@ def add_hook_in_ASP(tmp_path, stdout):
     f.write_text('processor("asp_selftest.application:TestHaak"). bee.')
     app = MainApp()
     ctl = Control()
-    app.main(ctl, [f.as_posix()])
+    with app:
+        app.main(ctl, [f.as_posix()])
     test.eq('bee', find_symbol(ctl, "bee"))
     #test.eq([], app.delegates)
     test.eq('testhook(ground)', find_symbol(ctl, "testhook", 1))
@@ -270,7 +301,8 @@ def hook_in_ASP_is_too_late_for_some_methods(tmp_path, stdout):
     with test.raises(
             AssertionError,
             "'message_limit' of asp_selftest.application:TestHook2 can never be called.") as e:
-        app.main(ctl, [f.as_posix()])
+        with app:
+            app.main(ctl, [f.as_posix()])
 
 
 @test
@@ -289,7 +321,8 @@ def multiple_hooks(tmp_path):
     h2 = Hook2()
     app = MainApp(hooks=[h1, h2])
     ctl = Control()
-    app.main(ctl, [f.as_posix()])
+    with app:
+        app.main(ctl, [f.as_posix()])
     test.eq('boe', find_symbol(ctl, "boe"))
     test.eq('hook_1', find_symbol(ctl, "hook_1"))
     test.eq('hook_2', find_symbol(ctl, "hook_2"))
