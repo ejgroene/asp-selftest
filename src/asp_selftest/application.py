@@ -82,7 +82,7 @@ class DefaultHook:
         control.solve(*a, **k)
 
     def logger(this, self, code, message):
-        return code, message # pragma no cover
+        pass
 
     def print_model(this, self, model, printer):
         printer()
@@ -99,6 +99,8 @@ def clingo_called(f):
         try:
             return f(self, *a, **k)
         except Exception as e:
+            if self._exception:  # and error has been logged, but another error occurred
+                raise
             self._exception = e
     return wrap
 
@@ -126,6 +128,7 @@ class MainApp(Application, contextlib.AbstractContextManager):
         self.program_name = "clingo+tests"
         self.trace = trace or (lambda *a, **k: None)
         self._context_active = False
+        self._exception = None
         Application.__init__(self)
 
     @property
@@ -138,6 +141,10 @@ class MainApp(Application, contextlib.AbstractContextManager):
     @delegate
     def logger(self, code, message):
         raise NotImplementedError("logger")  # pragma no cover
+
+    @delegate
+    def suppress_logger(self, code):
+        raise NotImplementedError("suppress_logger")  # pragma no cover
 
     @clingo_called
     @delegate
@@ -177,9 +184,9 @@ class MainApp(Application, contextlib.AbstractContextManager):
         # exceptions here could be programming errors
         #assert not exc_value, f"Got exception: {exc_value}"
         self._context_active = False
-        if hasattr(self, "_exception"):
+        if self._exception:
             raise self._exception
-        return self.check()
+        self.check()
 
 
 @test

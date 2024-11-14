@@ -231,11 +231,6 @@ class Tester:
     def output_atom(self, symbol, atom):
         self._symbols[atom] = symbol
 
-    def __getattr__(self, name):
-        if name in self._funcs:
-            return self._funcs[name]
-        raise AttributeError(name)
-
 
 
 class CompoundContext:
@@ -291,26 +286,10 @@ class TesterHook:
             control = clingo.Control(['0'], logger=self.logger, message_limit=self.message_limit)
             control.register_observer(tester)
             self.load(control, this.ast)
-            if this.quit:
-                print("   QUIT 1  ", file=sys.stderr)
-                raise RuntimeError # TODO testme; Clingo logs errors but does not (always) raise
             self.ground(control, parts, context=CompoundContext(tester, context))
-            if this.quit:
-                print("   QUIT 2  ", file=sys.stderr)
-                raise RuntimeError
             self.solve(control, on_model=tester.on_model)
-            if this.quit:
-                print("   QUIT 3  ", file=sys.stderr)
-                raise RuntimeError
             this.on_report(prog_name, tester.report())
         self.ground(ctl, base_parts, context)
-
-    def logger(this, self, code, message):
-        # we quit after the first error/warning/message
-        result = self.logger(code, message)
-        if result:  # TODO Testme; allow others to suppress error
-            this.quit = True
-        return result
 
 
 from clingo.ast import ASTType

@@ -29,12 +29,14 @@ def save_exception(f):
     @functools.wraps(f)
     def wrap(self, *a, **k):
         try:
+            if self.exception:
+                return # we quit the process early, as these could yield more errors
             return f(self, *a, **k)
         except RuntimeError as e:
             if self.exception:
                 raise self.exception
             else:
-                raise e
+                raise
     return wrap
 
 
@@ -42,6 +44,7 @@ class SyntaxErrors:
 
     def __init__(this):
         this.exception = None
+        this._suppress = None
 
     def message_limit(this, self):
         return 1
@@ -59,17 +62,24 @@ class SyntaxErrors:
         self.ground(ctl, parts, context)
 
     def logger(this, self, code, message):
-        results = self.logger(code, message)
-        if results:
-            if this.exception:
-                print("  WARNING ALREADY exception:", this.exception, file=sys.stdout)
-                print("               while logging:", message, file=sys.stdout)
-            else:
-                this.exception = warn2raise(None, None, *results)
+        self.logger(code, message)
+        if this._suppress == code:
+            this._suppress = None
+            return
+        if this.exception:
+            print("  WARNING ALREADY exception:", this.exception, file=sys.stdout)
+            print("               while logging:", message, file=sys.stdout)
+        else:
+            this.exception = warn2raise(None, None, code, message)
 
-        return results
+    def suppress_logger(this, self, code):
+        this._suppress = code
 
     def check(this, self):
         self.check()
         if this.exception:
-            raise this.exception
+            try:
+                raise this.exception
+            finally:
+                this.exception = None
+
