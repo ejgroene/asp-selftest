@@ -117,11 +117,12 @@ sys.modules['__main__'].register = register
 
 class Tester:
 
-    def __init__(self, name):
-        self.reset(name)
+    def __init__(self, filename, name):
+        self.reset(filename, name)
 
 
-    def reset(self, name):
+    def reset(self, filename, name):
+        self._filename = filename
         self._name = name
         self._asserts = {}
         self._anys = set()
@@ -174,7 +175,8 @@ class Tester:
         for a, s in self._symbols.items():
             body = self._rules[a]
             if s in self._asserts and len(body) > 1:
-                self.failures.append(Warning(f"Duplicate: {s} (disjunction found)"))
+                self.failures.append(
+                        Warning(f"Duplicate: {s} (disjunction found) in {self._name} in {self._filename}."))
                 return False
 
         for ensure in (s for s in model.symbols(atoms=True) if has_name(s, 'ensure')):
@@ -189,8 +191,8 @@ class Tester:
             modelstr = format_symbols(model.symbols(shown=True))
             self.failures.append(AssertionError(
                 f"MODEL:\n{modelstr}\n"
-                f"#program {self._name}() FAILED assertions: {', '.join(map(str, failures))}\n"
-                f"Test Failure. Model printed above."))
+                f"Failures in {self._filename}, #program {self._name}():\n"
+                f"{', '.join(map(str, failures))}\n"))
             return False
         return True
 
@@ -208,7 +210,7 @@ class Tester:
             # also, with 'base' we can have 0 or more models, which are not checked
             # because 'base' can be included elsewhere, and that context can influence
             # the number of models found.
-            assert models > 0, f"{self._name}: no models found."
+            assert models > 0, f"{self._filename}: {self._name}: no models found."
             assert models == self._models_soll, f"Expected {self._models_soll} models, found {models}."
         assert not self._anys, f"Asserts not in any of the {models} models:{CR}{CR.join(str(a) for a in self._anys)}"
         return dict(asserts={str(a) for a in self._asserts}, models=models)
@@ -255,14 +257,20 @@ class TesterHook:
 
     def __init__(this, on_report=print_test_result):
         this.programs = {}
+        this.program_nodes = []
         this.ast = []   # we keep a copy of the ast to load it for each test
         this.on_report = on_report
         this.quit = False
 
+    def parts(this):
+        # TODO test sorting
+        for node in sorted(this.program_nodes, key=lambda x: x.location.begin.filename):
+            yield node.location.begin.filename, node.name, [(p.name, []) for p in node.parameters]
 
     def parse(this, self, ctl, files, on_ast):
         def filter(a):
             if p := is_program(a):
+                this.program_nodes.append(a)
                 name, dependencies = p
                 if name in this.programs and name != 'base':
                     raise Exception(f"Duplicate program name: {name!r}")
@@ -274,21 +282,26 @@ class TesterHook:
 
     def ground(this, self, ctl, base_parts, context):
         this.quit = False # TODO thing about something not on state of this
-        for prog_name, dependencies in this.programs.items():
+        previous_file = None
+        for filename, prog_name, dependencies in this.parts():
+            #if filename != previous_file:
+            #    print(" ** Testing:", filename)
+            previous_file = filename
             if prog_name.startswith('test_'):  # TODO better test
                 parts = base_parts + list(prog_with_dependencies(this.programs, prog_name, dependencies))
             elif prog_name == 'base':  # TODO better test
                 parts = (('base', ()),)
             else:
                 continue
-            tester = Tester(prog_name)
+            tester = Tester(filename, prog_name)
             # play nice with other hooks; maybe also add original arguments?
             control = clingo.Control(['0'], logger=self.logger, message_limit=self.message_limit)
             control.register_observer(tester)
             self.load(control, this.ast)
             self.ground(control, parts, context=CompoundContext(tester, context))
             self.solve(control, on_model=tester.on_model)
-            this.on_report(prog_name, tester.report())
+            report = tester.report() | {'filename': filename, 'testname': prog_name}
+            this.on_report(report)
         self.ground(ctl, base_parts, context)
 
 
@@ -317,11 +330,11 @@ def we_CAN_NOT_i_repeat_NOT_reuse_control():
 
 @test
 def report_not_for_base_model_count():
-    t = Tester('harry')
+    t = Tester('filea.lp', 'harry')
     t._asserts['an'] = 'assert'
-    with test.raises(AssertionError, 'harry: no models found.'):
+    with test.raises(AssertionError, 'filea.lp: harry: no models found.'):
         t.report()
-    t = Tester('base')
+    t = Tester('fileb.lp', 'base')
     t._asserts['assert1'] = 'assert'
     r = t.report()
     test.eq({'asserts': {'assert1'}, 'models': 0}, r)

@@ -59,7 +59,7 @@ def ground_and_solve(lines, on_model=None, **kws):
 
 def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
     reports = []
-    ctl = ground_exc(asp_code, hooks=list(hooks) + [TesterHook(on_report=lambda *a: reports.append(a))])
+    ctl = ground_exc(asp_code, hooks=list(hooks) + [TesterHook(on_report=lambda r: reports.append(r))])
     for r in reports:
         yield r
 
@@ -77,8 +77,12 @@ def simple_program():
         assert(@all("facts")) :- fact.
         assert(@models(1)).
      """)
-    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
-    test.eq(('test_fact', {'asserts': {'assert("facts")', 'assert(models(1))'}, 'models': 1}), next(t))
+    data = next(t)
+    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    data = next(t)
+    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.eq({'testname': 'test_fact', 'asserts': {'assert("facts")', 'assert(models(1))'}, 'models': 1}, data)
 
 
 @test
@@ -97,9 +101,15 @@ def dependencies():
         assert(@all("one includes base")) :- base_fact, one_fact.
         assert(@models(1)).
      """)
-    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
-    test.eq(('test_base', {'asserts': {'assert("base_facts")'       , 'assert(models(1))'}, 'models': 1}), next(t))
-    test.eq(('test_one' , {'asserts': {'assert("one includes base")', 'assert(models(1))'}, 'models': 1}), next(t))
+    data = next(t)
+    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    data = next(t)
+    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.eq({'testname': 'test_base', 'asserts': {'assert("base_facts")', 'assert(models(1))'}, 'models': 1}, data)
+    data = next(t)
+    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.eq({'testname': 'test_one' , 'asserts': {'assert("one includes base")', 'assert(models(1))'}, 'models': 1}, data)
 
 
 #@test   # passing parameters to programs is no longer supported
@@ -128,8 +138,12 @@ def warn_for_disjunctions():
         assert(@all(time_exists)) :- time(T).
         assert(@models(1)).
      """)
-    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
-    test.eq(('test_base', {'asserts': {'assert(models(1))', 'assert(time_exists)'}, 'models': 1}), next(t))
+    data = next(t)
+    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    data = next(t)
+    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.eq({'testname': 'test_base', 'asserts': {'assert(models(1))', 'assert(time_exists)'}, 'models': 1}, data)
 
 
 @test
@@ -139,11 +153,16 @@ def format_empty_model():
         #external what.
         assert(@all(test)) :- what.
     """)
-    with test.raises(AssertionError, """MODEL:
-<empty>
-#program test_model_formatting() FAILED assertions: assert(test)
-Test Failure. Model printed above."""):
+    with test.raises(AssertionError) as e:
         next(r)
+    p = tempfile.gettempdir()
+    msg = str(e.exception)
+    test.startswith(msg, f"""MODEL:
+<empty>
+Failures in {p}""")
+    test.endswith(msg, """, #program test_model_formatting():
+assert(test)
+""")
 
 
 @test
@@ -155,13 +174,18 @@ def format_model_small():
         #external what.
         assert(@all(test)) :- what.
     """)
-    with test.raises(AssertionError, """MODEL:
-this_is_a_fact(1)
-this_is_a_fact(2)
-#program test_model_formatting() FAILED assertions: assert(test)
-Test Failure. Model printed above."""):  
+    with test.raises(AssertionError) as e:  
         with mock.patch("shutil.get_terminal_size", lambda _: (37,20)):
             next(r)
+    msg = str(e.exception)
+    p = tempfile.gettempdir()
+    test.startswith(msg, f"""MODEL:
+this_is_a_fact(1)
+this_is_a_fact(2)
+Failures in {p}""")
+    test.endswith(msg, f""", #program test_model_formatting():
+assert(test)
+""")
 
 
 @test
@@ -173,13 +197,18 @@ def format_model_wide():
         #external what.
         assert(@all(test)) :- what.
     """)
-    with test.raises(AssertionError, """MODEL:
-this_is_a_fact(1)  this_is_a_fact(2)
-this_is_a_fact(3)
-#program test_model_formatting() FAILED assertions: assert(test)
-Test Failure. Model printed above."""):  
+    with test.raises(AssertionError) as e:  
         with mock.patch("shutil.get_terminal_size", lambda _: (38,20)):
             next(r)
+    msg = str(e.exception)
+    p = tempfile.gettempdir()
+    test.startswith(msg, f"""MODEL:
+this_is_a_fact(1)  this_is_a_fact(2)
+this_is_a_fact(3)
+Failures in {p}""")
+    test.endswith(msg, f""", #program test_model_formatting():
+assert(test)
+""")
 
 
 @test
@@ -372,9 +401,12 @@ def ensure_iso_python_call():
         next(t)
         test.fail("should raise")  # pragma no cover
     except AssertionError as e:
-        test.contains(str(e), 'FAILED assertions: assert("a")')
+        test.contains(str(e), 'Failures in ')
+        test.contains(str(e), '#program base():\nassert("a")\n')
     t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(2).  ensure(assert("a")).')
-    test.eq(('base', {'asserts': {'assert("a")'}, 'models': 1}), next(t))
+    data = next(t)
+    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.eq({'testname': 'base', 'asserts': {'assert("a")'}, 'models': 1}, data)
 
 
 @test
@@ -384,7 +416,9 @@ def alternative_models_predicate():
         ensure(assert(1)).
         models(1).
      """)
-    test.eq(('base', {'asserts': {'assert(1)'}, 'models': 1}), next(t))
+    data = next(t)
+    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.eq({'testname': 'base', 'asserts': {'assert(1)'}, 'models': 1}, data)
 
 
 @test
@@ -397,8 +431,13 @@ def warning_about_duplicate_assert():
         assert(@all("A"))  :-  a(2).
         assert(@models(1)).
      """)
-    with test.raises(Warning, 'Duplicate: assert("A") (disjunction found)'):
+    with test.raises(Warning) as e:
         next(t)
+    msg = str(e.exception)
+    test.startswith(msg,
+        'Duplicate: assert("A") (disjunction found) in test_one in /')
+    test.endswith(msg,
+        '-ASP-code.lp.')
 
 
 @test
@@ -428,14 +467,21 @@ def NO_warning_about_duplicate_assert_2():
         assert(@all("precondition"))  :-  { precondition(0, 144, voeding) } = 0.
         assert(@models(1)).
      """)
-    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
-    test.eq([('test_one_1', {'asserts': {'assert("precondition")', 'assert(models(1))'}, 'models': 1})], list(t))
+    data = next(t)
+    data.pop('filename')
+    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    data = next(t)
+    data.pop('filename')
+    test.eq({'testname': 'test_one_1', 'asserts': {'assert("precondition")', 'assert(models(1))'}, 'models': 1}, data)
+    test.eq([], list(t))
 
 
 @test
 def do_not_report_on_base_without_any_asserts():
     t = parse_and_run_tests("some. stuff.")
-    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
+    data = next(t)
+    data.pop('filename')
+    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     test.eq([], list(t))
 
 
@@ -449,8 +495,12 @@ def assert_with_any():
         assert(@all(ab)) :- { a; b } = 1.
         assert(@models(2)).
      """)
-    test.eq(('base', {'asserts': set(), 'models': 1}), next(t))
-    test.eq(('test_one', {'asserts': {'assert(ab)', 'assert(models(2))'}, 'models': 2}), next(t))
+    data = next(t)
+    data.pop('filename')
+    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    data = next(t)
+    data.pop('filename')
+    test.eq({'testname': 'test_one', 'asserts': {'assert(ab)', 'assert(models(2))'}, 'models': 2}, data)
 
 
 @test
@@ -463,7 +513,7 @@ def duplicate_any_warning(stdout):
         assert(@models(2)).
      """)
     next(t)
-    test.eq("WARNING: duplicate assert: assert(a)\n", stdout.getvalue())
+    test.endswith(stdout.getvalue(), "WARNING: duplicate assert: assert(a)\n")
 
 
 @test
