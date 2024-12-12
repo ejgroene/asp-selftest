@@ -16,7 +16,8 @@ def has_name(symbol, name):
    return symbol.type == clingo.SymbolType.Function and symbol.name == name
 
 
-def print_test_result(name, result):
+def print_test_result(result):
+    name = result['testname']
     asserts = result['asserts']
     models = result['models']
     print(f"ASPUNIT: {name}: ", end='', flush=True)

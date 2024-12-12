@@ -35,8 +35,13 @@ register(repeat)
 assert(@all(@repeat("hi"))).
 assert(@models(1)).
 """)
-    test.eq([('base', {'asserts': set(), 'models': 1}),
-             ('test_me', {'asserts': {'assert(models(1))', 'assert("hi")'}, 'models': 1})], list(t))
+    data = next(t)
+    data.pop('filename')
+    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data),
+    data = next(t)
+    data.pop('filename')
+    test.eq({'testname': 'test_me', 'asserts': {'assert(models(1))', 'assert("hi")'}, 'models': 1}, data)
+    test.eq([], list(t))
 
 
 @test

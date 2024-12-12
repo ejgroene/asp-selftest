@@ -29,8 +29,8 @@ def run_asp_tests(*files, base_programs=(), hooks=()):
         asp_code = program_file.read()
         from .runasptests import parse_and_run_tests
         from .tester import print_test_result
-        for name, result in parse_and_run_tests(asp_code, base_programs, hooks=hooks):
-            print_test_result(name, result)  # TODO doesn't parse_and_run_tests already call print_test_result?
+        for result in parse_and_run_tests(asp_code, base_programs, hooks=hooks):
+            print_test_result(result)  # TODO doesn't parse_and_run_tests already call print_test_result?
 
 
 # this function is directly executed by pip installed code wrapper, see pyproject.toml
