@@ -2,35 +2,25 @@ asp-selftest
 ============
 In-source test runner for Answer Set Programming (ASP) with Clingo.
 
+Status
+------
+
+This tools is still a work in progress.
+
+This Test-Tool has been presented at (Declarative Amsterdam in November 2024)[https://declarative.amsterdam/program-2024]. All the materials, including the presentation, are online and can be found via the given link.
+
+It is currently in transition from `asp-test` towards `clingo-tests`. The latter is a drop-in replacement for `clingo` with the added ability to activate `plugins`. The former is still around.
+
+A plugin for running the in-source unit tests is active by default. A plugin translating clingo (syntax) errors to Python exceptions with ASP source snippets with exact error location is also active.
+
+You can write you own plugins. I have one for reifying rules from theory atoms, for example.
+
+About
+-----
+
 With in-source testing, source and tests stay together in the same file, hence the tests are also expressed in ASP.
 
 The tests are as non-obstrusive as possible and and many examples are idiomatic in nature and could have been written in another way. These idioms are merely ways to provide clearer code and avoid mistakes. As such, they have value in themselves.
-
-
-MINIMALISTIC APPROACH
----------------------
-Tests could be as simple as creating ordinary predicates that become true when certain conditions hold. One could name such a predicate `assert`. Imagine:
-
-    assert("output down on T=0")  :-  output(0, "X").
-
-Simple as it is, this can already be very useful when combined with `#show`:
-
-    assert("output down on T=0")  :-  output(0, "X").
-    #show assert/1.
-
-The program is compatible with normal Clingo. It will output all asserts that succeed, suitable for manual inspection. It is very useful for initial development.  Verifying the asserts is much easier because they are more to the point (more functional) than core model parameters.
-
-But what about failing asserts? One that should be true, but it isn't?  Without special measures, it will silently be absent.
-
-Signalling failures
--------------------
-
-[runner checks for asserts]
-
-Asserting Negations
--------------------
-
-[write sets, not 'not']
 
 
 RUNNING
@@ -75,7 +65,7 @@ IDEA
 
        #program step(a).
     
-       #program test_step(step(2)).
+       #program test_step(step(2)).   % this feature is no longer present in `clingo-tests`.
 
    Note that using this feature makes the program incompatible with Clingo. The test runner has an option to transform a extended program back to compatible Clingo without running the tests.
 
@@ -89,6 +79,8 @@ IDEA
         assert(@all("step fact"))  :-  fact(3).
 
    Note that `"step fact"` is just a way of distinquishing the assert. It can be an atom, a string, a number or anything else. Pay attention to the uniqueness in case of variables in the body. Take note of point 5 below.
+
+   You can use `@any` instead of `@all` to assert truths that must be present in at least one model.
 
 
 4. To enable testing constraints and to guard tests for empty model sets, we use `@models` to check for the expected number of models. In the example above, we would add:
