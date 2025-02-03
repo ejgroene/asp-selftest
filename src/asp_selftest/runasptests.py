@@ -38,7 +38,9 @@ def ground_exc(program, label='ASP-code', arguments=[], parts=(('base', ()),),
     with tempfile.NamedTemporaryFile(mode='w', suffix=f"-{label}.lp") as f:
         f.write(program if isinstance(program, str) else '\n'.join(program))
         f.seek(0)
-        with MainApp(trace=trace, hooks=list(hooks) + [SyntaxErrors(), Haak()]) as app:
+        with MainApp(trace=trace,
+                     hooks=list(hooks) + [SyntaxErrors(), Haak()],
+                     arguments=arguments) as app:
             ctl = clingo.Control(arguments, logger=app.logger, message_limit=app.message_limit)
             if extra_src:
                 ctl.add(extra_src)
@@ -59,7 +61,9 @@ def ground_and_solve(lines, on_model=None, **kws):
 
 def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
     reports = []
-    ctl = ground_exc(asp_code, hooks=list(hooks) + [TesterHook(on_report=lambda r: reports.append(r))])
+    ctl = ground_exc(asp_code,
+                     hooks=list(hooks) + [TesterHook(on_report=lambda r: reports.append(r))],
+                     arguments=['0'])
     for r in reports:
         yield r
 
