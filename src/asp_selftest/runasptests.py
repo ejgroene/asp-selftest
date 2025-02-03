@@ -532,4 +532,25 @@ def check_args_of_dependencies():
             "Argument mismatch in 'test_b' for dependency 'a'. Required: ['x'], given: []."):
         next(t)
 
+
+@test
+def constraints_are_more_better(stdout):
+    # The idea is to writes asserts just like ASP constraints, but by providing a head (which in an 
+    # ASP constraint can never be true) we catch the result, and if it is true, we raise AssertionError.
+    # So the constraint does not work as a contraint in the sense that it limit the possible models, it
+    # only signals the models that are not correct; if there are any. We use 'none' as the predicate
+    # as to indicate that not a single model containing this constraint is valid.
+    t = parse_and_run_tests("""
+        #program test_constraints.
+        a.
+        none("not in a single model")  :-  a.
+    """)
+    with test.raises(AssertionError) as e:
+        next(t)
+    test.startswith(str(e.exception), """MODEL:
+a                              none("not in a single model")
+Failures in """)
+    test.endswith(str(e.exception), '#program test_constraints():\nnone("not in a single model")\n')
+
+
 # more tests in moretests.py to avoid circular imports

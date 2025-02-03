@@ -132,6 +132,7 @@ class Tester:
         self._funcs = {}
         self._current_rule = None
         self.failures = []
+        self.constraints = []
         self._symbols = {}
         self._rules = collections.defaultdict(set)
 
@@ -174,6 +175,10 @@ class Tester:
         self._models_ist += 1
 
         for a, s in self._symbols.items():
+            if s.name == 'none':
+                self.constraints.append(s)
+
+        for a, s in self._symbols.items():
             body = self._rules[a]
             if s in self._asserts and len(body) > 1:
                 self.failures.append(
@@ -187,7 +192,7 @@ class Tester:
         for a in set(self._anys):
             if model.contains(a):
                 self._anys.remove(a)
-        failures = [a for a in self._asserts if not model.contains(a)]
+        failures = [a for a in self._asserts if not model.contains(a)] + self.constraints
         if failures:
             modelstr = format_symbols(model.symbols(shown=True))
             self.failures.append(AssertionError(
@@ -347,3 +352,4 @@ def report_not_for_base_model_count():
     t._asserts['assert1'] = 'assert'
     r = t.report()
     test.eq({'asserts': {'assert1'}, 'models': 0}, r)
+
