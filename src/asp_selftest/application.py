@@ -22,7 +22,7 @@ test = selftest.get_tester(__name__)
 
 def main_main(programs, arguments, hooks):
     programs and print("Grounding programs:", programs)
-    with MainApp(programs=programs, hooks=hooks) as app:
+    with MainApp(programs=programs, hooks=hooks, arguments=arguments) as app:
         clingo_main(app, arguments)
 
 
@@ -123,12 +123,13 @@ class MainApp(Application, contextlib.AbstractContextManager):
         we collect exceptions and raise them afterwards in check().
     """
 
-    def __init__(self, programs=None, hooks=(), trace=None):
+    def __init__(self, programs=None, hooks=(), trace=None, arguments=()):
         self.delegates = list(hooks) + [DefaultHook(programs)]
         self.program_name = "clingo+tests"
         self.trace = trace or (lambda *a, **k: None)
         self._context_active = False
         self._exception = None
+        self.arguments = arguments
         Application.__init__(self)
 
     @property

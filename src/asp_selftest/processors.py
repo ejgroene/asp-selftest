@@ -63,6 +63,10 @@ class SyntaxErrors:
 
     def logger(this, self, code, message):
         self.logger(code, message)
+        if code == clingo.MessageCode.FileIncluded:
+            # always ignore duplicate includes, only warn. @TODO TESTME
+            print("Ignoring duplicate #include:", message, file=sys.stderr)
+            return
         if this._suppress == code:
             this._suppress = None
             return

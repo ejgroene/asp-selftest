@@ -48,9 +48,11 @@ def clingo_plus_tests():
     #import cProfile
     #import pstats
     #with cProfile.Profile() as p:
-    #    main_main(opts.programs, remaining, hooks=[TesterHook(), SyntaxErrors()])
-    #    s = pstats.Stats(p, stream=sys.stderr)
-    #    s.sort_stats('cumulative')
-    #    s.print_stats(.01)
+    #    try:
+    #        main_main(opts.programs, remaining, hooks=[TesterHook(), SyntaxErrors()])
+    #    except BaseException:
+    #        s = pstats.Stats(p, stream=sys.stderr)
+    #        s.sort_stats('time')
+    #        s.print_stats(.01)
 
 

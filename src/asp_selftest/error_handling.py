@@ -85,6 +85,7 @@ def warn2raise(lines, label, code, msg):
             name = file
             srclines = [l.removesuffix('\n') for l in open(file).readlines()]
         else:
+            name = 'stdin?'
             srclines = []
         w = 1
         max_lineno = len(srclines)

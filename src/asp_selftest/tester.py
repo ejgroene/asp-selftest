@@ -212,7 +212,9 @@ class Tester:
             # because 'base' can be included elsewhere, and that context can influence
             # the number of models found.
             assert models > 0, f"{self._filename}: {self._name}: no models found."
-            assert models == self._models_soll, f"Expected {self._models_soll} models, found {models}."
+            if models != self._models_soll:
+                raise Exception(f"Expected {self._models_soll} models, found {models}.")
+            #assert models == self._models_soll, f"Expected {self._models_soll} models, found {models}."
         assert not self._anys, f"Asserts not in any of the {models} models:{CR}{CR.join(str(a) for a in self._anys)}"
         return dict(asserts={str(a) for a in self._asserts}, models=models)
 
@@ -269,6 +271,7 @@ class TesterHook:
             yield node.location.begin.filename, node.name, [(p.name, []) for p in node.parameters]
 
     def parse(this, self, ctl, files, on_ast):
+        this.files = files
         def filter(a):
             if p := is_program(a):
                 this.program_nodes.append(a)
@@ -296,7 +299,12 @@ class TesterHook:
                 continue
             tester = Tester(filename, prog_name)
             # play nice with other hooks; maybe also add original arguments?
-            control = clingo.Control(['0'], logger=self.logger, message_limit=self.message_limit)
+            # TODO TEST TEST
+            args = [a for a in self.arguments if a not in this.files]
+            control = clingo.Control(
+                    args, #['0']
+                    logger=self.logger,
+                    message_limit=self.message_limit)
             control.register_observer(tester)
             self.load(control, this.ast)
             self.ground(control, parts, context=CompoundContext(tester, context))
