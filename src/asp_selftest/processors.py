@@ -54,8 +54,8 @@ class SyntaxErrors:
         self.parse(ctl, files, on_ast)
 
     @save_exception
-    def load(this, self, ctl, ast):
-        self.load(ctl, ast)
+    def load(this, self, ctl, ast, parts=None):
+        self.load(ctl, ast, parts=parts)
 
     @save_exception
     def ground(this, self, ctl, parts, context):

@@ -4,6 +4,8 @@ import coverage
 c = coverage.Coverage(source_pkgs=["asp_selftest"])
 c.erase()
 c.start()
+import asp_selftest.delegate
+import asp_selftest.session
 
 import asp_selftest.utils
 import asp_selftest.reify

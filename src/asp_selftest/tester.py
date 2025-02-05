@@ -12,6 +12,9 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
+from .session import CompoundContext
+
+
 def has_name(symbol, name):
    return symbol.type == clingo.SymbolType.Function and symbol.name == name
 
@@ -168,14 +171,14 @@ class Tester:
     def on_model(self, model):
         """ Callback when model is found; count model and check all asserts. """
         if self._models_soll == -1:
-            models = next((s for s in model.symbols(atoms=True) if has_name(s, 'models')),
+            models = next((s for s in model.symbols(shown=True) if has_name(s, 'models')),
                           None)
             if models:
                 self._models_soll = models.arguments[0].number
         self._models_ist += 1
 
-        for a, s in self._symbols.items():
-            if s.name == 'none':
+        for s in model.symbols(atoms=True):
+            if has_name(s, 'none'):
                 self.constraints.append(s)
 
         for a, s in self._symbols.items():
@@ -243,24 +246,6 @@ class Tester:
 
 
 
-class CompoundContext:
-    """ Clingo looks up functions in __main__ OR in context; we need both.
-        (Functions defined in #script land in __main__)
-    """
-
-    def __init__(self, *contexts):
-        self._contexts = contexts
-
-    def add_context(self, *context):
-        self._contexts += context
-
-    def __getattr__(self, name):
-        for c in self._contexts:
-            if f := getattr(c, name, None):
-                return f
-        return getattr(sys.modules['__main__'], name)
-
-
 class TesterHook:
 
     def __init__(this, on_report=print_test_result):
@@ -311,7 +296,7 @@ class TesterHook:
                     logger=self.logger,
                     message_limit=self.message_limit)
             control.register_observer(tester)
-            self.load(control, this.ast)
+            self.load(control, this.ast, parts=parts)
             self.ground(control, parts, context=CompoundContext(tester, context))
             self.solve(control, on_model=tester.on_model)
             report = tester.report() | {'filename': filename, 'testname': prog_name}

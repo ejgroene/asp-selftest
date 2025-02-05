@@ -13,7 +13,7 @@ from clingo.script import enable_python
 enable_python()
 
 
-from .utils import is_processor_predicate, delegate, find_locals, find_symbol
+from .utils import is_processor_predicate, delegate, find_symbol
 
 
 import selftest
@@ -65,7 +65,7 @@ class DefaultHook:
             on_ast(ast)
         clingo.ast.parse_files(files, callback=add, logger=self.logger, message_limit=self.message_limit)
 
-    def load(this, self, ctl, ast):
+    def load(this, self, ctl, ast, parts=None):
         with clingo.ast.ProgramBuilder(ctl) as pb:
             for a in ast:
                 try:
@@ -124,6 +124,7 @@ class MainApp(Application, contextlib.AbstractContextManager):
     """
 
     def __init__(self, programs=None, hooks=(), trace=None, arguments=()):
+        self.programs = programs
         self.delegates = list(hooks) + [DefaultHook(programs)]
         self.program_name = "clingo+tests"
         self.trace = trace or (lambda *a, **k: None)

@@ -11,7 +11,8 @@ from clingo import Function, Number
 from .error_handling import AspSyntaxError
 from .application import MainApp
 from .processors import SyntaxErrors
-from .tester import TesterHook, CompoundContext
+from .tester import TesterHook
+from .session import CompoundContext
 
 import selftest
 test = selftest.get_tester(__name__)
