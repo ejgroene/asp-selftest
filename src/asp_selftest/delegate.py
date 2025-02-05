@@ -9,29 +9,6 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
-def find_symbol(ctl, name, arity=0):
-    return str(next(ctl.symbolic_atoms.by_signature(name, arity)).symbol)
-
-
-def is_processor_predicate(p):
-    """ check if p is a processor(<classname>) and return <classname> """
-    if p.ast_type == clingo.ast.ASTType.Rule:
-        p = p.head
-        if p.ast_type == clingo.ast.ASTType.Literal:
-            p = p.atom
-            if p.ast_type == clingo.ast.ASTType.SymbolicAtom:
-                p = p.symbol
-                if p.ast_type == clingo.ast.ASTType.Function:
-                    name, args = p.name, p.arguments
-                    if name == 'processor':
-                        p = args[0]
-                        if p.ast_type == clingo.ast.ASTType.SymbolicTerm:
-                            p = p.symbol
-                            if p.type == clingo.symbol.SymbolType.String:
-                                p = p.string
-                                if isinstance(p, str):
-                                    return p
-
 
 def locals(name):
     f = inspect.currentframe().f_back
@@ -62,7 +39,8 @@ class Delegate:
     delegatees = ()
 
     def __getattr__(self, name):
-        assert name in self.delegated, name
+        if name not in self.delegated:
+            raise AttributeError(f"'{name}' not marked for delegation")
         def delegatee(*args, **kwargs):
             for this in self.delegatees:
                 if handler := getattr(this, name, None):
@@ -78,14 +56,14 @@ class Delegate:
         if 'delegatees' not in self.__dict__:
             self.delegatees = list(self.delegatees)
         for d in delegatees:
-            self.delegatees.append(d)
+            self.delegatees.insert(0, d)
 
 
 @test
 def delegation_not_mentioned():
     class B(Delegate):
         pass
-    with test.raises(AssertionError, 'f'):
+    with test.raises(AttributeError, "'f' not marked for delegation"):
         B().f()
 
 
