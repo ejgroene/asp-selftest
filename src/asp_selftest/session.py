@@ -4,6 +4,8 @@ import contextlib
 import importlib
 
 import clingo.ast
+from clingo.script import enable_python
+enable_python()
 
 from .delegate import Delegate
 from .utils import find_symbol, is_processor_predicate
@@ -33,6 +35,10 @@ class CompoundContext:
 
 class DefaultHandler:
     """ implements all basic operations on Clingo, meant as last handler """
+
+    def prepare(this, self, parameters):
+        contexts = [parameters['context']] if 'context' in parameters else []
+        parameters['context'] = CompoundContext(*contexts)
 
     def parse(this, self, parameters):
         """ parse code in source or files into an ast, scans for
@@ -64,7 +70,6 @@ class DefaultHandler:
     def ground(this, self, control, parameters):
         """ ground the given parts, using context """
         parameters.setdefault('parts', [('base', ()),])
-        parameters.setdefault('context', CompoundContext())
         control.ground(parameters['parts'], context=parameters['context'])
 
     def solve(this, self, control, parameters):
@@ -85,7 +90,7 @@ class AspSession(Delegate, contextlib.AbstractContextManager):
 
     # methods in delegated are forwarded to delegatees. note that delegatees is static,
     # meaning that every instance of AspSession will use it
-    delegated = ('parse', 'control', 'load', 'ground', 'solve', 'logger')
+    delegated = ('prepare', 'parse', 'control', 'load', 'ground', 'solve', 'logger')
     delegatees = (DefaultHandler(),)
 
     def __init__(self, source=None, files=None, context=None):
@@ -99,6 +104,7 @@ class AspSession(Delegate, contextlib.AbstractContextManager):
             parameters['files'] = files
         if context is not None:
             parameters['context'] = context
+        self.prepare(parameters)
         self.parse(parameters)
 
     def __call__(self, control=None, parts=None, **solve_options):
@@ -135,7 +141,7 @@ class AspSession(Delegate, contextlib.AbstractContextManager):
 
     def add_handler(self, handler_name):
         print("Inserting handler:", handler_name, file=sys.stderr)
-        modulename, classname = handler_name.split(':')
+        modulename, classname = handler_name.rsplit(':' if ':' in handler_name else '.', 1)
         module = importlib.import_module(modulename)
         handler_class = getattr(module, classname)
         handler = handler_class()
@@ -285,3 +291,30 @@ def select_parts():
         test.truth(models[0].contains(clingo.Function('a')))
         test.truth(models[0].contains(clingo.Function('b')))
         test.truth(models[0].contains(clingo.Function('c')))
+
+
+class Handler:
+    def ground(this, self, control, parameters):
+        parameters['context'].add_context(this)
+        self.ground(control, parameters)
+    def b(this):
+        return  clingo.Number(19)
+
+@test
+def three_contexts():
+    class Context:
+        def a(self):
+            return clingo.Number(42)
+    with AspSession(f"""
+processor("{__name__}.{Handler.__qualname__}").
+#script (python)
+import clingo
+def c():
+    return clingo.Number(88)
+#end.
+a(@a()). b(@b()). c(@c()).
+""",
+            context=Context()) as s:
+        c = s.go_ground()
+        test.eq(['a(42)', 'b(19)', 'c(88)', 'processor("asp_selftest.session.Handler")'],
+                [str(a.symbol) for a in c.symbolic_atoms])

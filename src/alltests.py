@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 import coverage
-c = coverage.Coverage(source_pkgs=["asp_selftest"])
-c.erase()
-c.start()
+coverage = coverage.Coverage(source_pkgs=["asp_selftest"])
+coverage.erase()
+coverage.start()
 import asp_selftest.delegate
 import asp_selftest.session
 
@@ -18,6 +18,6 @@ import asp_selftest.moretests
 import asp_selftest.runasptests
 
 
-c.stop()
-c.save()
-c.html_report()
+coverage.stop()
+coverage.save()
+coverage.html_report()
