@@ -78,15 +78,14 @@ def warn2raise(lines, label, code, msg):
             return RuntimeError(msg)
         messages = parse_message(msg)
         file, line, start, end, key, msg, more = messages[0]
+        name = label if label else '<asp code>'
         if file == '<block>':
-            name = repr(label) if label else "ASP code"
             srclines = lines if lines else []
         elif pathlib.Path(file).exists():
             name = file
             srclines = [l.removesuffix('\n') for l in open(file).readlines()]
         else:
-            name = 'stdin?'
-            srclines = []
+            srclines = lines if lines else []
         w = 1
         max_lineno = len(srclines)
         nr_width = 1 + int(math.log10(max_lineno)) if max_lineno > 0 else 0
@@ -137,7 +136,7 @@ def print_clingo_path_on_file_could_not_be_opened():
     try:
         error = warn2raise([], 'no-file', None, "<block>:3:4-5: info: file could not be opened:\n  dus")
         test.isinstance(error, AspSyntaxError)
-        test.eq("'no-file'", error.filename)
+        test.eq("no-file", error.filename)
         test.eq(3, error.lineno)
         test.eq(None, error.offset)
         test.eq('         ^ file could not be opened:  dus\nCLINGOPATH=paf', error.text)
@@ -163,3 +162,12 @@ def make_snippet_witg_proper_indent():
     11 error
        ^^^^^ hier moet een punt staan:  snappie?""",
         error.text, diff=test.diff)
+
+@test
+def nieuw_geval():
+    source = """a.
+an error"""
+    error = warn2raise(source.splitlines(), None, 'code', '<string>:2:4-9: error: syntax error, unexpected <IDENTIFIER>')
+    test.eq("""    1 a.
+    2 an error
+         ^^^^^ syntax error, unexpected <IDENTIFIER>""", error.text)

@@ -37,8 +37,12 @@ class DefaultHandler:
     """ implements all basic operations on Clingo, meant as last handler """
 
     def prepare(this, self, parameters):
-        contexts = [parameters['context']] if 'context' in parameters else []
-        parameters['context'] = CompoundContext(*contexts)
+        assert parameters['files'] or parameters['source']
+        self._spent_controls = set()
+        if context := parameters['context']:
+            parameters['context'] = CompoundContext(context)
+        else:
+            parameters['context'] = CompoundContext()
 
     def parse(this, self, parameters):
         """ parse code in source or files into an ast, scans for
@@ -51,14 +55,14 @@ class DefaultHandler:
                 for method_name in ('prepare', 'parse'):
                     assert not hasattr(handler, method_name), f"{method_name!r} of {processor_name} can never be called."
             append(node)
-        if 'files' in parameters:
-            clingo.ast.parse_files(parameters['files'], callback=add, logger=self.logger, message_limit=1)
-        if 'source' in parameters:
-            clingo.ast.parse_string(parameters['source'], callback=add, logger=self.logger, message_limit=1)
+        if files := parameters['files']:
+            clingo.ast.parse_files(files, callback=add, logger=self.logger, message_limit=1)
+        if source := parameters['source']:
+            clingo.ast.parse_string(source, callback=add, logger=self.logger, message_limit=1)
 
     def control(this, self, parameters):
         """ if no one did something smart, we create an default control """
-        return clingo.Control()
+        return clingo.Control(logger=self.logger)
 
     def load(this, self, control, parameters):
         """ loads the AST into the given control """
@@ -79,7 +83,7 @@ class DefaultHandler:
 
     def logger(this, self, code, message):
         """ if no one cares, we just print """
-        print(message)
+        print("Unhandled:", code, message)
 
 
 
@@ -93,19 +97,13 @@ class AspSession(Delegate, contextlib.AbstractContextManager):
     delegated = ('prepare', 'parse', 'control', 'load', 'ground', 'solve', 'logger')
     delegatees = (DefaultHandler(),)
 
-    def __init__(self, source=None, files=None, context=None):
+    def __init__(self, source=None, files=None, context=None, label=None, handlers=()):
         """ prepare source as string or from files for grounding and solving """
-        assert files or source
-        self._spent_controls = set()
-        self.parameters = parameters = {}
-        if source is not None:
-            parameters['source'] = source
-        if files is not None:
-            parameters['files'] = files
-        if context is not None:
-            parameters['context'] = context
-        self.prepare(parameters)
-        self.parse(parameters)
+        self.parameters = dict(source=source, files=files, context=context, label=label)
+        for handler in handlers:
+            self.add_delegatee(handler)
+        self.prepare(self.parameters)
+        self.parse(self.parameters)
 
     def __call__(self, control=None, parts=None, **solve_options):
         """ combine ground and solve for convenience """

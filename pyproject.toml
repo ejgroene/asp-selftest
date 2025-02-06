@@ -27,6 +27,7 @@ dependencies=[
 [project.scripts]
 asp-tests = "asp_selftest.__main__:main"
 clingo-tests = "asp_selftest.__main__:clingo_plus_tests"
+"clingo+" = "asp_selftest.__main__:clingo_plus"
 
 
 [tool.setuptools]
