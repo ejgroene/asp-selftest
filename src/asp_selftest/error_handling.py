@@ -1,7 +1,6 @@
 import traceback
 import re
 import os
-import sys
 import math
 import pathlib
 
@@ -79,13 +78,12 @@ def warn2raise(lines, label, code, msg):
         messages = parse_message(msg)
         file, line, start, end, key, msg, more = messages[0]
         name = label if label else '<asp code>'
+        srclines = lines if lines else []
         if file == '<block>':
             srclines = lines if lines else []
         elif pathlib.Path(file).exists():
             name = file
             srclines = [l.removesuffix('\n') for l in open(file).readlines()]
-        else:
-            srclines = lines if lines else []
         w = 1
         max_lineno = len(srclines)
         nr_width = 1 + int(math.log10(max_lineno)) if max_lineno > 0 else 0
@@ -109,9 +107,6 @@ def warn2raise(lines, label, code, msg):
         exit(-1)
 
 
-# #TODO TEST: hoe zien we het block (reified?)
-# None None MessageCode.RuntimeError <block>:1:19-20: error: syntax error, unexpected (
-
 # NB: most tests dor warn2raise are still in runasptests.py, indirectly checking for SyntaxError's
 @test
 def raise_warnings_as_exceptions(stderr):
@@ -123,11 +118,13 @@ def raise_warnings_as_exceptions(stderr):
     test.startswith(msg, "Traceback (most recent call last):")
     test.endswith(msg, "TypeError: expected string or bytes-like object, got 'NoneType'\n")
 
+
 @test
 def deal_with_command_line_errors():
     e = warn2raise(None, None, None, "<cmd>: all wrong!")
     test.eq(RuntimeError, type(e))
     test.eq(('<cmd>: all wrong!',), e.args)
+
 
 @test
 def print_clingo_path_on_file_could_not_be_opened():
@@ -171,3 +168,4 @@ an error"""
     test.eq("""    1 a.
     2 an error
          ^^^^^ syntax error, unexpected <IDENTIFIER>""", error.text)
+

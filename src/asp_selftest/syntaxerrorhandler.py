@@ -14,21 +14,16 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
-def save_exception(f):
-    @functools.wraps(f)
+def save_exception(function):
+    @functools.wraps(function)
     def wrap(self, *a, **k):
         try:
-            if self.exception:
-                return # we quit the process early, as these could yield more errors
-            result = f(self, *a, **k)
-            if self.exception:
-                raise self.exception
-            return result
+            result = function(self, *a, **k)
         except RuntimeError as e:
-            if self.exception:
-                raise self.exception
-            else:
-                raise
+            assert self.exception, f"{e}: a message should have been logged via logger()"
+        if self.exception:
+            raise self.exception
+        return result
     return wrap
 
 
@@ -51,7 +46,6 @@ class SyntaxErrorHandler:
         self.ground(ctl, parameters)
 
     def logger(this, self, code, message):
-        #self.logger(code, message)
         if code == clingo.MessageCode.FileIncluded:
             # always ignore duplicate includes, only warn. @TODO TESTME
             print("Ignoring duplicate #include:", message, file=sys.stderr)
