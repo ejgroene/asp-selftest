@@ -20,11 +20,11 @@ class ExceptionGuard(contextlib.AbstractContextManager):
     _context_active = False
 
     @staticmethod
-    def guard(f):
-        @functools.wraps(f)
+    def guard(method):
+        @functools.wraps(method)
         def guarding(self, *a, **k):
             try:
-                return f(self, *a, **k)
+                return method(self, *a, **k)
             except Exception as e:
                 if previous_exc := getattr(self, '_exception', False):
                     previous_exc.add_note(f"(followed by {e!r})")
@@ -34,8 +34,8 @@ class ExceptionGuard(contextlib.AbstractContextManager):
 
 
     def __getattribute__(self, name):
-        if name != '_context_active':
-            assert self._context_active, f"only to be used as context manager"
+        if name not in ['_context_active', '__class__']:
+            assert self._context_active, f"{self.__class__.__qualname__} only to be used as context manager"
         return object.__getattribute__(self, name)
 
 
@@ -51,12 +51,12 @@ class ExceptionGuard(contextlib.AbstractContextManager):
 
 
 @test
-def guard_against_use_without_with():
+def enforce_with():
     class A(ExceptionGuard):
         def f(self):
             pass
     a = A()
-    with test.raises(AssertionError, "only to be used as context manager"):
+    with test.raises(AssertionError, "enforce_with.<locals>.A only to be used as context manager"):
         a.f()
 
 

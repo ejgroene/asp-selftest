@@ -57,7 +57,8 @@ class SyntaxErrorHandler:
             print("  WARNING ALREADY exception:", this.exception, file=sys.stdout)
             print("               while logging:", message, file=sys.stdout)
         else:
-            source = self.parameters['source'].splitlines()
+            if source := self.parameters['source']:
+                source = source.splitlines()
             label = self.parameters['label']
             this.exception = warn2raise(source, label, code, message)
 
@@ -236,3 +237,14 @@ def duplicate_const():
                   ^^^^^^^^^^^^^^ redefinition of constant:  #const a=43.
     4             """, e.exception.text, diff=test.diff)
 
+
+@test
+def error_in_file(tmp_path):
+    code = tmp_path/'code.lp'
+    code.write_text('oops(().')
+    with test.raises(AspSyntaxError) as e:
+        with AspSession(files=[code.as_posix()], handlers=(SyntaxErrorHandler(),)) as s:
+            pass
+        test.endswith(e.exception.text, """
+    1 oops(().
+             ^ syntax error, unexpected ., expecting ) or ;""")
