@@ -9,6 +9,7 @@ enable_python()
 
 from .delegate import Delegate
 from .utils import find_symbol, is_processor_predicate
+from .exceptionguard import ExceptionGuard
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -87,7 +88,7 @@ class DefaultHandler:
 
 
 
-class AspSession(Delegate, contextlib.AbstractContextManager):
+class AspSession(Delegate, ExceptionGuard):
     """ More sensible interface to Clingo, allowing for handlers with afvanced feaures, even
         for small snippets, such as proper error messages, automated testing, reificatin etc.
     """
@@ -133,9 +134,6 @@ class AspSession(Delegate, contextlib.AbstractContextManager):
 
     def __getitem__(self, name):
         return self.parameters[name]
-
-    def __exit__(self, t, v, tb):
-        del self.parameters
 
     def add_handler(self, handler_name):
         print("Inserting handler:", handler_name, file=sys.stderr)

@@ -31,7 +31,7 @@ class MainApp(Application, ExceptionGuard):
         with self.session as s:
             return list(s(control=ctl))
 
-    @ExceptionGuard.guard
+    @ExceptionGuard.guard       # called by clingo for errors/warnings
     def logger(self, code, message):
         self.session.logger(code, message)
 

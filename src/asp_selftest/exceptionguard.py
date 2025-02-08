@@ -1,6 +1,7 @@
 
 import functools
 import contextlib
+import inspect
 
 
 import clingo
@@ -18,13 +19,15 @@ class ExceptionGuard(contextlib.AbstractContextManager):
     """
 
     _context_active = False
+    _guarded_functions = []
 
     @staticmethod
-    def guard(method):
-        @functools.wraps(method)
+    def guard(function):
+        ExceptionGuard._guarded_functions.append(function)
+        @functools.wraps(function)
         def guarding(self, *a, **k):
             try:
-                return method(self, *a, **k)
+                return function(self, *a, **k)
             except Exception as e:
                 if previous_exc := getattr(self, '_exception', False):
                     previous_exc.add_note(f"(followed by {e!r})")
@@ -34,9 +37,12 @@ class ExceptionGuard(contextlib.AbstractContextManager):
 
 
     def __getattribute__(self, name):
-        if name not in ['_context_active', '__class__']:
-            assert self._context_active, f"{self.__class__.__qualname__} only to be used as context manager"
-        return object.__getattribute__(self, name)
+        attr =  object.__getattribute__(self, name)
+        if inspect.ismethod(attr):
+            f = getattr(attr.__func__,'__wrapped__', None)
+            if f in ExceptionGuard._guarded_functions and not self._context_active:
+                raise AssertionError(f"{f.__qualname__} only to be called within a context manager")
+        return attr
 
 
     def __enter__(self):
@@ -54,10 +60,14 @@ class ExceptionGuard(contextlib.AbstractContextManager):
 def enforce_with():
     class A(ExceptionGuard):
         def f(self):
+            return 42
+        @ExceptionGuard.guard
+        def g(self):
             pass
     a = A()
-    with test.raises(AssertionError, "enforce_with.<locals>.A only to be used as context manager"):
-        a.f()
+    test.eq(42, a.f())
+    with test.raises(AssertionError, "enforce_with.<locals>.A.g only to be called within a context manager"):
+        a.g()
 
 
 @test
