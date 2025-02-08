@@ -1,4 +1,5 @@
 
+
 from clingo import Application, clingo_main
 
 
@@ -11,7 +12,7 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
-class MainApp(Application, ExceptionGuard):
+class MainApp(Application, AspSession):
     """ An instance of this class is the first argument to clingo_main()
         NB: clingo_main does not allow for exceptions being thrown in the
             python code it calls. So we capture all exceptions and raise
@@ -21,19 +22,20 @@ class MainApp(Application, ExceptionGuard):
     message_limit = 1        # idem, 1, so fail fast
 
     def __init__(self, programs=None, handlers=(), arguments=()):
-        self.programs = programs
-        self.handlers = handlers
-        self.arguments = arguments
+        AspSession.__init__(self, handlers=handlers)
+        #self.programs = programs  # TODO test
+        #self.handlers = handlers  # TODO test
+        #self.arguments = arguments  # TODO test
 
     @ExceptionGuard.guard
-    def main(self, ctl, files): # called by clingo's clingo_main
-        self.session = AspSession(files=files, handlers=self.handlers)
-        with self.session as s:
-            return list(s(control=ctl))
+    def main(self, control, files):
+        self.parameters['files'] = files
+        self.parameters['solve_options'] = {} # avoid iterator; won't work with clingo_main
+        self(control=control)
 
-    @ExceptionGuard.guard       # called by clingo for errors/warnings
-    def logger(self, code, message):
-        self.session.logger(code, message)
+    @ExceptionGuard.guard
+    def logger(self, code, message): 
+        self.delegate('logger', code, message)
 
 
 @test

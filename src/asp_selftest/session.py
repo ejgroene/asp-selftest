@@ -39,7 +39,6 @@ class DefaultHandler:
 
     def prepare(this, self, parameters):
         assert parameters['files'] or parameters['source']
-        self._spent_controls = set()
         if context := parameters['context']:
             parameters['context'] = CompoundContext(context)
         else:
@@ -77,6 +76,7 @@ class DefaultHandler:
         parameters.setdefault('parts', [('base', ()),])
         control.ground(parameters['parts'], context=parameters['context'])
 
+
     def solve(this, self, control, parameters):
         """ solves and return an iterator with models, if any """
         parameters.setdefault('solve_options', {'yield_': True})
@@ -100,16 +100,21 @@ class AspSession(Delegate, ExceptionGuard):
 
     def __init__(self, source=None, files=None, context=None, label=None, handlers=()):
         """ prepare source as string or from files for grounding and solving """
+        self._spent_controls = set()
         self.parameters = dict(source=source, files=files, context=context, label=label)
         for handler in handlers:
             self.add_delegatee(handler)
-        self.prepare(self.parameters)
-        self.parse(self.parameters)
 
     def __call__(self, control=None, parts=None, **solve_options):
         """ combine ground and solve for convenience """
+        self.go_prepare()
         control = self.go_ground(control=control, parts=parts)
-        return self.go_solve(control, **solve_options)
+        r = self.go_solve(control, **solve_options)
+        return r
+
+    def go_prepare(self):
+        self.prepare(self.parameters)
+        self.parse(self.parameters)
 
     def go_ground(self, control=None, parts=None):
         """ ground parts into given control; control must be fresh """
@@ -130,7 +135,8 @@ class AspSession(Delegate, ExceptionGuard):
         parameters = self.parameters
         if solve_options != {} :
             parameters['solve_options'] = solve_options
-        return self.solve(control, parameters)
+        r = self.solve(control, parameters)
+        return r
 
     def __getitem__(self, name):
         return self.parameters[name]
@@ -159,6 +165,7 @@ def dont_do_this_it_segvs():
 @test
 def create_session():
     with AspSession("aap.") as s:
+        s.go_prepare()
         control = s.go_ground()
         models = list(s.go_solve(control))
         test.eq(['aap'], [str(a.symbol) for a in control.symbolic_atoms.by_signature('aap', 0)])
@@ -190,10 +197,10 @@ def hook_basics():
             test.eq(app, self)
             test.eq({'42': 42}, parameters)
             return 46
-        def logger(this, self, parameters):
+        def logger(this, self, code, message):
             test.eq(th, this)
             test.eq(app, self)
-            test.eq({'42': 42}, parameters)
+            test.eq({'42': 42}, message)
             return 47
 
     th = TestHook()
@@ -204,7 +211,7 @@ def hook_basics():
         test.eq(44, session.parse(data))
         test.eq(45, session.ground(data))
         test.eq(46, session.solve(data))
-        test.eq(47, session.logger(data))
+        test.eq(47, session.logger(8, data))
 
 
 # for testing hooks
@@ -219,6 +226,7 @@ def add_hook_in_ASP(stderr):
     app = AspSession('processor("asp_selftest.session:TestHaak"). bee.')
     ctl = clingo.Control()
     with app:
+        app.go_prepare()
         app.go_ground(control=ctl)
         list(app.go_solve(control=ctl))
     test.eq('bee', find_symbol(ctl, "bee"))
@@ -236,10 +244,11 @@ class TestHook2:
 
 @test
 def hook_in_ASP_is_too_late_for_some_methods(stdout):
-    with test.raises(
-            AssertionError,
-            "'parse' of asp_selftest.session:TestHook2 can never be called.") as e:
-        AspSession('processor("asp_selftest.session:TestHook2"). bee.')
+    with AspSession('processor("asp_selftest.session:TestHook2"). bee.') as session:
+        with test.raises(
+                AssertionError,
+                "'parse' of asp_selftest.session:TestHook2 can never be called.") as e:
+            session.go_prepare()
 
 
 @test
@@ -258,6 +267,7 @@ def multiple_hooks():
     session.add_delegatee(h1)
     session.add_delegatee(h2)
     with session:
+        session.go_prepare()
         control = session.go_ground()
         list(session.go_solve(control=control))
         test.eq('boe', find_symbol(control, "boe"))
@@ -268,6 +278,7 @@ def multiple_hooks():
 @test
 def select_parts():
     with AspSession("a. #program p. b. #program q. c.") as s:
+        s.go_prepare()
         models = list(s(parts=[('base',())]))
         test.truth(models[0].contains(clingo.Function('a')))
         test.not_( models[0].contains(clingo.Function('b')))
@@ -311,6 +322,7 @@ def c():
 a(@a()). b(@b()). c(@c()).
 """,
             context=Context()) as s:
+        s.go_prepare()
         c = s.go_ground()
         test.eq(['a(42)', 'b(19)', 'c(88)', 'processor("asp_selftest.session.Handler")'],
                 [str(a.symbol) for a in c.symbolic_atoms])

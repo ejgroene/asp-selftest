@@ -2,6 +2,8 @@
 import functools
 import contextlib
 import inspect
+import traceback
+import sys
 
 
 import clingo
@@ -52,7 +54,9 @@ class ExceptionGuard(contextlib.AbstractContextManager):
 
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        if not exc_type and hasattr(self, '_exception'):
+        if hasattr(self, '_exception'):
+            if exc_value:
+                self._exception.add_note(f"followed by: {exc_value}")
             raise self._exception
 
 
@@ -97,7 +101,7 @@ def clingo_logger_exception(tmp_path, stdout):
     with test.raises(SyntaxError, "first exception") as e:
         with app:
             clingo_main(app, ['test.lp'])
-    test.eq(["(followed by RuntimeError('parsing failed'))"], e.exception.__notes__)
+    test.eq("(followed by RuntimeError('parsing failed'))", e.exception.__notes__[0])
     test.startswith(stdout.getvalue(), "clingo version ")
 
 
@@ -108,8 +112,9 @@ def do_not_mask_other_exceptions(stdout):
         def main(self, control, files):
             raise RuntimeError("HELP")
     app = App()
-    with test.raises(NameError, "name 'this_raises' is not defined"):
+    with test.raises(RuntimeError, "HELP") as e:
         with app:
             clingo_main(app, ['nothere.lp'])
             this_raises
+    test.eq("followed by: name 'this_raises' is not defined", e.exception.__notes__[0])
     test.startswith(stdout.getvalue(), "clingo version ")

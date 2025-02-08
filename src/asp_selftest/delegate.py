@@ -38,6 +38,7 @@ class Delegate:
     delegated = ()
     delegatees = ()
 
+
     def __getattr__(self, name):
         if name not in self.delegated:
             raise AttributeError(f"'{name}' not marked for delegation")
@@ -49,7 +50,14 @@ class Delegate:
                     return handler(self, *args, **kwargs)
             seen = ', '.join(sorted(set(l.__qualname__ for l in locals('handler'))))
             raise AttributeError(f"{name!r} not found in: [{seen}]")
+        delegatee.__name__ = name
+        delegatee.__qualname__ = f"{self.__class__.__qualname__}.{name}"
         return delegatee
+
+
+    def delegate(self, name, *args, **kwargs):
+        delegatee = self.__getattr__(name)
+        return delegatee(*args, **kwargs)
 
 
     def add_delegatee(self, *delegatees):
@@ -182,6 +190,19 @@ def add_delegatees():
         d2.g()
     with test.raises(AttributeError):
         d2.h()
+
+
+@test
+def use_explicit_delegation():
+    class A:
+        def f(this, self, name, msg='bye'):
+            return f"Hello {name}, {msg}!"
+    class D(Delegate):
+        delegated = ('f',)
+        delegatees = (A(),)
+        def f(self, name, msg):
+            return self.delegate('f', name, msg=msg)
+    test.eq("Hello Pite, go!", D().f('Pite', msg='go'))
 
 
 @test

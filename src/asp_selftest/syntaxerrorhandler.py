@@ -3,28 +3,20 @@
 
 import os
 import sys
-import clingo
 import functools
+import traceback
+
+
+import clingo
+
 
 from .session import AspSession
 from .error_handling import warn2raise, AspSyntaxError
+from .exceptionguard import ExceptionGuard
 
 
 import selftest
 test = selftest.get_tester(__name__)
-
-
-def save_exception(function):
-    @functools.wraps(function)
-    def wrap(self, *a, **k):
-        try:
-            result = function(self, *a, **k)
-        except RuntimeError as e:
-            assert self.exception, f"{e}: a message should have been logged via logger()"
-        if self.exception:
-            raise self.exception
-        return result
-    return wrap
 
 
 class SyntaxErrorHandler:
@@ -33,15 +25,12 @@ class SyntaxErrorHandler:
         this.exception = None
         this._suppress = None
 
-    @save_exception
     def parse(this, self, parameters):
         self.parse(parameters)
 
-    @save_exception
     def load(this, self, ctl, parameters):
         self.load(ctl, parameters)
 
-    @save_exception
     def ground(this, self, ctl, parameters):
         self.ground(ctl, parameters)
 
@@ -61,6 +50,7 @@ class SyntaxErrorHandler:
                 source = source.splitlines()
             label = self.parameters['label']
             this.exception = warn2raise(source, label, code, message)
+            raise(this.exception)
 
     def suppress_logger(this, self, code):
         this._suppress = code
@@ -73,15 +63,27 @@ class SyntaxErrorHandler:
             finally:
                 this.exception = None
 
-def ground_exc(source, label='test', parts=None, observer=None, context=None):
-    class Handler:
+def ground_exc(source=None, label='test', files=None, parts=None, observer=None, context=None):
+    class Handler(ExceptionGuard):
         def control(this, self, parameters):
             control = self.control(parameters)
             if observer:
                 control.register_observer(observer)
             return control
-    with AspSession(source, label=label, context=context, handlers=(SyntaxErrorHandler(), Handler())) as s:
-        return s.go_ground(parts=parts)
+        @ExceptionGuard.guard
+        def logger(this, self, code, message):
+            self.logger(code, message)
+        @ExceptionGuard.guard
+        def ground(this, self, *a):
+            self.ground(*a)
+        @ExceptionGuard.guard
+        def parse(this, self, *a):
+            self.parse(*a)
+    with Handler() as handler:
+        with AspSession(source=source, label=label, files=files,
+                        context=context, handlers=(SyntaxErrorHandler(), handler)) as s:
+            s.go_prepare()
+            return s.go_ground(parts=parts)
 
 
 @test
@@ -243,8 +245,8 @@ def error_in_file(tmp_path):
     code = tmp_path/'code.lp'
     code.write_text('oops(().')
     with test.raises(AspSyntaxError) as e:
-        with AspSession(files=[code.as_posix()], handlers=(SyntaxErrorHandler(),)) as s:
-            pass
+        with ground_exc(files=[code.as_posix()]) as s:
+            s.go_prepare()
         test.endswith(e.exception.text, """
     1 oops(().
              ^ syntax error, unexpected ., expecting ) or ;""")
