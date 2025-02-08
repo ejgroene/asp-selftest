@@ -9,7 +9,6 @@ enable_python()
 
 from .delegate import Delegate
 from .utils import find_symbol, is_processor_predicate
-from .exceptionguard import ExceptionGuard
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -37,6 +36,10 @@ class CompoundContext:
 class DefaultHandler:
     """ implements all basic operations on Clingo, meant as last handler """
 
+    def control(this, self, parameters):
+        """ if no one did something smart, we create a default control """
+        return clingo.Control(logger=self.logger)
+
     def prepare(this, self, parameters):
         assert parameters['files'] or parameters['source']
         if context := parameters['context']:
@@ -59,10 +62,6 @@ class DefaultHandler:
             clingo.ast.parse_files(files, callback=add, logger=self.logger, message_limit=1)
         if source := parameters['source']:
             clingo.ast.parse_string(source, callback=add, logger=self.logger, message_limit=1)
-
-    def control(this, self, parameters):
-        """ if no one did something smart, we create an default control """
-        return clingo.Control(logger=self.logger)
 
     def load(this, self, control, parameters):
         """ loads the AST into the given control """
@@ -88,7 +87,7 @@ class DefaultHandler:
 
 
 
-class AspSession(Delegate, ExceptionGuard):
+class AspSession(Delegate):
     """ More sensible interface to Clingo, allowing for handlers with afvanced feaures, even
         for small snippets, such as proper error messages, automated testing, reificatin etc.
     """
@@ -164,7 +163,8 @@ def dont_do_this_it_segvs():
 
 @test
 def create_session():
-    with AspSession("aap.") as s:
+    #with AspSession("aap.") as s:
+        s = AspSession("aap.")
         s.go_prepare()
         control = s.go_ground()
         models = list(s.go_solve(control))
@@ -179,39 +179,39 @@ def hook_basics():
     class TestHook:
         def prepare(this, self, parameters):
             test.eq(th, this)
-            test.eq(app, self)
+            test.eq(session, self)
             test.eq({'42': 42}, parameters)
             return 43
         def parse(this, self, parameters):
             test.eq(th, this)
-            test.eq(app, self)
+            test.eq(session, self)
             test.eq({'42': 42}, parameters)
             return 44
         def ground(this, self, parameters):
             test.eq(th, this)
-            test.eq(app, self)
+            test.eq(session, self)
             test.eq({'42': 42}, parameters)
             return 45
         def solve(this, self, parameters):
             test.eq(th, this)
-            test.eq(app, self)
+            test.eq(session, self)
             test.eq({'42': 42}, parameters)
             return 46
         def logger(this, self, code, message):
             test.eq(th, this)
-            test.eq(app, self)
+            test.eq(session, self)
             test.eq({'42': 42}, message)
             return 47
 
     th = TestHook()
-    app = AspSession("bee.")
-    with app as session:
-        session.add_delegatee(th)
-        data = {'42': 42}
-        test.eq(44, session.parse(data))
-        test.eq(45, session.ground(data))
-        test.eq(46, session.solve(data))
-        test.eq(47, session.logger(8, data))
+    session = AspSession("bee.")
+    #with app as session:
+    session.add_delegatee(th)
+    data = {'42': 42}
+    test.eq(44, session.parse(data))
+    test.eq(45, session.ground(data))
+    test.eq(46, session.solve(data))
+    test.eq(47, session.logger(8, data))
 
 
 # for testing hooks
@@ -223,12 +223,12 @@ class TestHaak:
 
 @test
 def add_hook_in_ASP(stderr):
-    app = AspSession('processor("asp_selftest.session:TestHaak"). bee.')
+    session = AspSession('processor("asp_selftest.session:TestHaak"). bee.')
     ctl = clingo.Control()
-    with app:
-        app.go_prepare()
-        app.go_ground(control=ctl)
-        list(app.go_solve(control=ctl))
+    #with app:
+    session.go_prepare()
+    session.go_ground(control=ctl)
+    list(session.go_solve(control=ctl))
     test.eq('bee', find_symbol(ctl, "bee"))
     test.eq('testhook(ground)', find_symbol(ctl, "testhook", 1))
     test.eq('Inserting handler: asp_selftest.session:TestHaak\n', stderr.getvalue())
@@ -244,11 +244,11 @@ class TestHook2:
 
 @test
 def hook_in_ASP_is_too_late_for_some_methods(stdout):
-    with AspSession('processor("asp_selftest.session:TestHook2"). bee.') as session:
-        with test.raises(
-                AssertionError,
-                "'parse' of asp_selftest.session:TestHook2 can never be called.") as e:
-            session.go_prepare()
+    session = AspSession('processor("asp_selftest.session:TestHook2"). bee.')
+    with test.raises(
+            AssertionError,
+            "'parse' of asp_selftest.session:TestHook2 can never be called.") as e:
+        session.go_prepare()
 
 
 @test
@@ -266,38 +266,38 @@ def multiple_hooks():
     h2 = Hook2()
     session.add_delegatee(h1)
     session.add_delegatee(h2)
-    with session:
-        session.go_prepare()
-        control = session.go_ground()
-        list(session.go_solve(control=control))
-        test.eq('boe', find_symbol(control, "boe"))
-        test.eq('hook_1', find_symbol(control, "hook_1"))
-        test.eq('hook_2', find_symbol(control, "hook_2"))
+    #with session:
+    session.go_prepare()
+    control = session.go_ground()
+    list(session.go_solve(control=control))
+    test.eq('boe', find_symbol(control, "boe"))
+    test.eq('hook_1', find_symbol(control, "hook_1"))
+    test.eq('hook_2', find_symbol(control, "hook_2"))
 
 
 @test
 def select_parts():
-    with AspSession("a. #program p. b. #program q. c.") as s:
-        s.go_prepare()
-        models = list(s(parts=[('base',())]))
-        test.truth(models[0].contains(clingo.Function('a')))
-        test.not_( models[0].contains(clingo.Function('b')))
-        test.not_( models[0].contains(clingo.Function('c')))
+    s = AspSession("a. #program p. b. #program q. c.")
+    s.go_prepare()
+    models = list(s(parts=[('base',())]))
+    test.truth(models[0].contains(clingo.Function('a')))
+    test.not_( models[0].contains(clingo.Function('b')))
+    test.not_( models[0].contains(clingo.Function('c')))
 
-        models = list(s(parts=[('p',())], control=clingo.Control()))
-        test.not_( models[0].contains(clingo.Function('a')))
-        test.truth(models[0].contains(clingo.Function('b')))
-        test.not_( models[0].contains(clingo.Function('c')))
+    models = list(s(parts=[('p',())], control=clingo.Control()))
+    test.not_( models[0].contains(clingo.Function('a')))
+    test.truth(models[0].contains(clingo.Function('b')))
+    test.not_( models[0].contains(clingo.Function('c')))
 
-        models = list(s(parts=[('q',())], control=clingo.Control()))
-        test.not_( models[0].contains(clingo.Function('a')))
-        test.not_( models[0].contains(clingo.Function('b')))
-        test.truth(models[0].contains(clingo.Function('c')))
+    models = list(s(parts=[('q',())], control=clingo.Control()))
+    test.not_( models[0].contains(clingo.Function('a')))
+    test.not_( models[0].contains(clingo.Function('b')))
+    test.truth(models[0].contains(clingo.Function('c')))
 
-        models = list(s(parts=[('base',()), ('p',()), ('q',())], control=clingo.Control()))
-        test.truth(models[0].contains(clingo.Function('a')))
-        test.truth(models[0].contains(clingo.Function('b')))
-        test.truth(models[0].contains(clingo.Function('c')))
+    models = list(s(parts=[('base',()), ('p',()), ('q',())], control=clingo.Control()))
+    test.truth(models[0].contains(clingo.Function('a')))
+    test.truth(models[0].contains(clingo.Function('b')))
+    test.truth(models[0].contains(clingo.Function('c')))
 
 
 class Handler:
@@ -312,7 +312,7 @@ def three_contexts():
     class Context:
         def a(self):
             return clingo.Number(42)
-    with AspSession(f"""
+    s = AspSession(f"""
 processor("{__name__}.{Handler.__qualname__}").
 #script (python)
 import clingo
@@ -321,8 +321,8 @@ def c():
 #end.
 a(@a()). b(@b()). c(@c()).
 """,
-            context=Context()) as s:
-        s.go_prepare()
-        c = s.go_ground()
-        test.eq(['a(42)', 'b(19)', 'c(88)', 'processor("asp_selftest.session.Handler")'],
-                [str(a.symbol) for a in c.symbolic_atoms])
+            context=Context())
+    s.go_prepare()
+    c = s.go_ground()
+    test.eq(['a(42)', 'b(19)', 'c(88)', 'processor("asp_selftest.session.Handler")'],
+            [str(a.symbol) for a in c.symbolic_atoms])

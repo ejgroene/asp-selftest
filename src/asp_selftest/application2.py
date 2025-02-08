@@ -3,8 +3,8 @@
 from clingo import Application, clingo_main
 
 
-from .exceptionguard import ExceptionGuard
 from .session import AspSession
+from .exceptionguard import ExceptionGuard
 from .error_handling import AspSyntaxError
 
 
@@ -12,11 +12,11 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
-class MainApp(Application, AspSession):
+class MainApp(Application, AspSession, ExceptionGuard):
     """ An instance of this class is the first argument to clingo_main()
         NB: clingo_main does not allow for exceptions being thrown in the
             python code it calls. So we capture all exceptions and raise
-            them after clingo_main returned.
+            them after clingo_main returned. ExceptionGuard does that.
     """
     program_name = 'clingo+' # clingo requirement
     message_limit = 1        # idem, 1, so fail fast

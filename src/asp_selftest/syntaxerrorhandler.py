@@ -80,10 +80,10 @@ def ground_exc(source=None, label='test', files=None, parts=None, observer=None,
         def parse(this, self, *a):
             self.parse(*a)
     with Handler() as handler:
-        with AspSession(source=source, label=label, files=files,
-                        context=context, handlers=(SyntaxErrorHandler(), handler)) as s:
-            s.go_prepare()
-            return s.go_ground(parts=parts)
+        s = AspSession(source=source, label=label, files=files,
+                        context=context, handlers=(SyntaxErrorHandler(), handler))
+        s.go_prepare()
+        return s.go_ground(parts=parts)
 
 
 @test
