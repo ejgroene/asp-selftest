@@ -1,14 +1,16 @@
 
 import sys
-import contextlib
 import importlib
+
 
 import clingo.ast
 from clingo.script import enable_python
 enable_python()
 
+
 from .delegate import Delegate
 from .utils import find_symbol, is_processor_predicate
+
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -22,8 +24,10 @@ class CompoundContext:
     def __init__(self, *contexts):
         self._contexts = contexts
 
+
     def add_context(self, *context):
         self._contexts += context
+
 
     def __getattr__(self, name):
         for c in self._contexts:
@@ -36,20 +40,23 @@ class CompoundContext:
 class DefaultHandler:
     """ implements all basic operations on Clingo, meant as last handler """
 
+
     def control(this, self, parameters):
         """ if no one did something smart, we create a default control """
         return clingo.Control(logger=self.logger)
 
+
     def prepare(this, self, parameters):
-        assert parameters['files'] or parameters['source']
         if context := parameters['context']:
             parameters['context'] = CompoundContext(context)
         else:
             parameters['context'] = CompoundContext()
 
+
     def parse(this, self, parameters):
         """ parse code in source or files into an ast, scans for
             processor directives and adds processors on the fly."""
+        assert parameters['files'] or parameters['source']
         parameters['ast'] = []
         append = parameters['ast'].append
         def add(node):
@@ -63,12 +70,14 @@ class DefaultHandler:
         if source := parameters['source']:
             clingo.ast.parse_string(source, callback=add, logger=self.logger, message_limit=1)
 
+
     def load(this, self, control, parameters):
         """ loads the AST into the given control """
-        with clingo.ast.ProgramBuilder(control) as b:
-            add = b.add
-            for a in parameters['ast']:
-                add(a)
+        with clingo.ast.ProgramBuilder(control) as builder:
+            add = builder.add
+            for node in parameters['ast']:
+                add(node)
+
 
     def ground(this, self, control, parameters):
         """ ground the given parts, using context """
@@ -78,8 +87,8 @@ class DefaultHandler:
 
     def solve(this, self, control, parameters):
         """ solves and return an iterator with models, if any """
-        parameters.setdefault('solve_options', {'yield_': True})
         return control.solve(**parameters['solve_options'])
+
 
     def logger(this, self, code, message):
         """ if no one cares, we just print """
@@ -97,12 +106,14 @@ class AspSession(Delegate):
     delegated = ('prepare', 'parse', 'control', 'load', 'ground', 'solve', 'logger')
     delegatees = (DefaultHandler(),)
 
+
     def __init__(self, source=None, files=None, context=None, label=None, handlers=()):
         """ prepare source as string or from files for grounding and solving """
         self._spent_controls = set()
         self.parameters = dict(source=source, files=files, context=context, label=label)
         for handler in handlers:
             self.add_delegatee(handler)
+
 
     def __call__(self, control=None, parts=None, **solve_options):
         """ combine ground and solve for convenience """
@@ -111,9 +122,11 @@ class AspSession(Delegate):
         r = self.go_solve(control, **solve_options)
         return r
 
+
     def go_prepare(self):
         self.prepare(self.parameters)
         self.parse(self.parameters)
+
 
     def go_ground(self, control=None, parts=None):
         """ ground parts into given control; control must be fresh """
@@ -130,15 +143,17 @@ class AspSession(Delegate):
         self.ground(control, parameters)
         return control
 
+
     def go_solve(self, control, **solve_options):
         parameters = self.parameters
-        if solve_options != {} :
-            parameters['solve_options'] = solve_options
+        parameters['solve_options'] = solve_options
         r = self.solve(control, parameters)
         return r
 
+
     def __getitem__(self, name):
         return self.parameters[name]
+
 
     def add_handler(self, handler_name):
         print("Inserting handler:", handler_name, file=sys.stderr)
@@ -163,15 +178,14 @@ def dont_do_this_it_segvs():
 
 @test
 def create_session():
-    #with AspSession("aap.") as s:
-        s = AspSession("aap.")
-        s.go_prepare()
-        control = s.go_ground()
-        models = list(s.go_solve(control))
-        test.eq(['aap'], [str(a.symbol) for a in control.symbolic_atoms.by_signature('aap', 0)])
-        models = list(models)
-        test.truth(models[0].contains(clingo.Function('aap')))
-        test.eq(1, len(models))
+    s = AspSession("aap.")
+    s.go_prepare()
+    control = s.go_ground()
+    models = list(s.go_solve(control, yield_=True))
+    test.eq(['aap'], [str(a.symbol) for a in control.symbolic_atoms.by_signature('aap', 0)])
+    models = list(models)
+    test.truth(models[0].contains(clingo.Function('aap')))
+    test.eq(1, len(models))
 
 
 @test
@@ -205,7 +219,6 @@ def hook_basics():
 
     th = TestHook()
     session = AspSession("bee.")
-    #with app as session:
     session.add_delegatee(th)
     data = {'42': 42}
     test.eq(44, session.parse(data))
@@ -225,10 +238,9 @@ class TestHaak:
 def add_hook_in_ASP(stderr):
     session = AspSession('processor("asp_selftest.session:TestHaak"). bee.')
     ctl = clingo.Control()
-    #with app:
     session.go_prepare()
     session.go_ground(control=ctl)
-    list(session.go_solve(control=ctl))
+    list(session.go_solve(control=ctl, yield_=True))
     test.eq('bee', find_symbol(ctl, "bee"))
     test.eq('testhook(ground)', find_symbol(ctl, "testhook", 1))
     test.eq('Inserting handler: asp_selftest.session:TestHaak\n', stderr.getvalue())
@@ -269,7 +281,7 @@ def multiple_hooks():
     #with session:
     session.go_prepare()
     control = session.go_ground()
-    list(session.go_solve(control=control))
+    list(session.go_solve(control=control, yield_=True))
     test.eq('boe', find_symbol(control, "boe"))
     test.eq('hook_1', find_symbol(control, "hook_1"))
     test.eq('hook_2', find_symbol(control, "hook_2"))
@@ -279,22 +291,22 @@ def multiple_hooks():
 def select_parts():
     s = AspSession("a. #program p. b. #program q. c.")
     s.go_prepare()
-    models = list(s(parts=[('base',())]))
+    models = list(s(parts=[('base',())], yield_=True))
     test.truth(models[0].contains(clingo.Function('a')))
     test.not_( models[0].contains(clingo.Function('b')))
     test.not_( models[0].contains(clingo.Function('c')))
 
-    models = list(s(parts=[('p',())], control=clingo.Control()))
+    models = list(s(parts=[('p',())], control=clingo.Control(), yield_=True))
     test.not_( models[0].contains(clingo.Function('a')))
     test.truth(models[0].contains(clingo.Function('b')))
     test.not_( models[0].contains(clingo.Function('c')))
 
-    models = list(s(parts=[('q',())], control=clingo.Control()))
+    models = list(s(parts=[('q',())], control=clingo.Control(), yield_=True))
     test.not_( models[0].contains(clingo.Function('a')))
     test.not_( models[0].contains(clingo.Function('b')))
     test.truth(models[0].contains(clingo.Function('c')))
 
-    models = list(s(parts=[('base',()), ('p',()), ('q',())], control=clingo.Control()))
+    models = list(s(parts=[('base',()), ('p',()), ('q',())], control=clingo.Control(), yield_=True))
     test.truth(models[0].contains(clingo.Function('a')))
     test.truth(models[0].contains(clingo.Function('b')))
     test.truth(models[0].contains(clingo.Function('c')))
@@ -306,6 +318,7 @@ class Handler:
         self.ground(control, parameters)
     def b(this):
         return  clingo.Number(19)
+
 
 @test
 def three_contexts():

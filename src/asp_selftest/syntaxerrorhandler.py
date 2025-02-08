@@ -1,10 +1,5 @@
 
-""" WIP: Clingo drop-in replacement with support for tests and hooks """
-
 import os
-import sys
-import functools
-import traceback
 
 
 import clingo
@@ -22,63 +17,48 @@ test = selftest.get_tester(__name__)
 class SyntaxErrorHandler:
 
     def __init__(this):
-        this.exception = None
-        this._suppress = None
+        this._suppress = None        # TODO:  TEST or REMOVE
 
-    def parse(this, self, parameters):
-        self.parse(parameters)
-
-    def load(this, self, ctl, parameters):
-        self.load(ctl, parameters)
-
-    def ground(this, self, ctl, parameters):
-        self.ground(ctl, parameters)
 
     def logger(this, self, code, message):
         if code == clingo.MessageCode.FileIncluded:
             # always ignore duplicate includes, only warn. @TODO TESTME
             print("Ignoring duplicate #include:", message, file=sys.stderr)
-            return
-        if this._suppress == code:
+        elif this._suppress == code:
             this._suppress = None
-            return
-        if this.exception:
-            print("  WARNING ALREADY exception:", this.exception, file=sys.stdout)
-            print("               while logging:", message, file=sys.stdout)
         else:
             if source := self.parameters['source']:
                 source = source.splitlines()
             label = self.parameters['label']
-            this.exception = warn2raise(source, label, code, message)
-            raise(this.exception)
+            raise warn2raise(source, label, code, message)
+
 
     def suppress_logger(this, self, code):
         this._suppress = code
 
-    def check(this, self):
-        self.check()
-        if this.exception:
-            try:
-                raise this.exception
-            finally:
-                this.exception = None
+
 
 def ground_exc(source=None, label='test', files=None, parts=None, observer=None, context=None):
     class Handler(ExceptionGuard):
+
         def control(this, self, parameters):
             control = self.control(parameters)
             if observer:
                 control.register_observer(observer)
             return control
+
         @ExceptionGuard.guard
         def logger(this, self, code, message):
             self.logger(code, message)
+
         @ExceptionGuard.guard
         def ground(this, self, *a):
             self.ground(*a)
+
         @ExceptionGuard.guard
         def parse(this, self, *a):
             self.parse(*a)
+
     with Handler() as handler:
         s = AspSession(source=source, label=label, files=files,
                         context=context, handlers=(SyntaxErrorHandler(), handler))
@@ -179,9 +159,9 @@ def parse_warning_raise_error():
         test.eq("""    1 a(1). sum(X) :- X = #sum { X : a(A) }.
                                  ^ global variable in tuple of aggregate element:  X""",
                 e.exception.text)
-        test.startswith(
-                out.getvalue(),
-                "  WARNING ALREADY exception: global variable in tuple of aggregate element:  X (test, line 1)")
+        #test.startswith(
+        #        out.getvalue(),
+        #        "  WARNING ALREADY exception: global variable in tuple of aggregate element:  X (test, line 1)")
 
 
 @test

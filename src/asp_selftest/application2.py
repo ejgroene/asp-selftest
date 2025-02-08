@@ -21,17 +21,19 @@ class MainApp(Application, AspSession, ExceptionGuard):
     program_name = 'clingo+' # clingo requirement
     message_limit = 1        # idem, 1, so fail fast
 
+
     def __init__(self, programs=None, handlers=(), arguments=()):
         AspSession.__init__(self, handlers=handlers)
         #self.programs = programs  # TODO test
         #self.handlers = handlers  # TODO test
         #self.arguments = arguments  # TODO test
 
+
     @ExceptionGuard.guard
     def main(self, control, files):
         self.parameters['files'] = files
-        self.parameters['solve_options'] = {} # avoid iterator; won't work with clingo_main
         self(control=control)
+
 
     @ExceptionGuard.guard
     def logger(self, code, message): 
@@ -51,9 +53,9 @@ def main_clingo_app(tmp_path, stdout):
     test.contains(response, "Answer: 1\nape\nSATISFIABLE")
 
 
+
 # to be called from entry point in __main__
 def main_clingo_plus(arguments):
-    #with MainApp(hook=[TestRunner(), SyntaxErrors()]) as app:
     from .syntaxerrorhandler import SyntaxErrorHandler
     with MainApp(handlers=[SyntaxErrorHandler()]) as app:
         clingo_main(app, arguments)
