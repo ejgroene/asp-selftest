@@ -40,6 +40,8 @@ class SyntaxErrorHandler:
 
 def ground_exc(source=None, label='test', files=(), parts=None, observer=None,  #TODO test files=() iso None
                context=None, handlers=(), arguments=()):
+    """ Utility for grounding with decent exceptions while protecting callbacks from exceptions """
+
     class Handler(ExceptionGuard):
 
         def control(this, self, parameters):  #TODO add arguments
@@ -52,20 +54,13 @@ def ground_exc(source=None, label='test', files=(), parts=None, observer=None,  
         def logger(this, self, code, message):
             self.logger(code, message)
 
-        @ExceptionGuard.guard
-        def ground(this, self, *a):
-            self.ground(*a)
-
-        @ExceptionGuard.guard
-        def parse(this, self, *a):
-            self.parse(*a)
-
     with Handler() as handler:
-        s = AspSession(source=source, label=label, files=files,
-                        context=context, handlers=handlers + (SyntaxErrorHandler(), handler),
-                       arguments=arguments)
-        s.go_prepare()
-        return s.go_ground(parts=parts)
+        session = AspSession(source=source, label=label, files=files,
+                             context=context, handlers=handlers + (SyntaxErrorHandler(), handler),
+                             arguments=arguments)
+        session.go_prepare()
+        return session.go_ground(parts=parts)
+       
 
 
 @test
