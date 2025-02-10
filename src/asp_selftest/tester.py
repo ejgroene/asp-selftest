@@ -1,3 +1,4 @@
+
 import sys
 import io
 import collections
@@ -107,20 +108,13 @@ def create_some_asserts():
 
 class Tester:
 
-    def __init__(self, filename, name, raiseifyouseeme=True):
-        if raiseifyouseeme:
-            raise Exception
-        self.reset(filename, name)
-
-
-    def reset(self, filename, name):
+    def __init__(self, filename, name):
         self._filename = filename
         self._name = name
         self._asserts = {}
         self._anys = set()
         self._models_ist = 0
         self._models_soll = -1
-        self._funcs = {}
         self._current_rule = None
         self.failures = []
         self.constraints = []
@@ -215,10 +209,6 @@ class Tester:
         return dict(asserts={str(a) for a in self._asserts}, models=models)
 
 
-    def add_function(self, func):
-        self._funcs[func.__name__] = func
-
-   
     def rule(self, choice, heads, body):
         """ Observer callback
             Needed for detecting duplicate assertions. It collects all rules and afterwards
@@ -255,32 +245,33 @@ class TesterHook:
                 if name in this.programs and name != 'base':
                     raise Exception(f"Duplicate program name: {name!r}")
                 this.programs[name] = [(d, []) for d in dependencies]
+        this._parts = this.parts()
 
 
     def ground(this, self, control, parameters):
-        for filename, prog_name, dependencies in this.parts():
-            testparameters = parameters.copy()
+        """ Grounds and solves the *whole* program for *each* #program test_<name> found. """
+        for filename, prog_name, dependencies in this._parts:
             if prog_name.startswith('test_'):  # TODO better test
-                testparameters['parts'] = parameters.get('parts',()) + tuple(prog_with_dependencies(this.programs, prog_name, dependencies))
+                parts = parameters.get('parts',()) + tuple(prog_with_dependencies(this.programs, prog_name, dependencies))
             elif prog_name == 'base':  # TODO better test
-                testparameters['parts'] = (('base', ()),)
+                parts = (('base', ()),)
             else:
                 continue
-            tester = Tester(filename, prog_name, raiseifyouseeme=False)
-            # play nice with other hooks; maybe also add original arguments?
-            # TODO TEST TEST
-            args = [a for a in testparameters['arguments'] if a not in testparameters['files']]
-            testcontrol = clingo.Control(
-                            args, #['0']
-                            logger=self.logger,
-                            message_limit=1)
+            tester = Tester(filename, prog_name)
+            # We want to use a fresh control, and honor the existing handlers,
+            # so we derive our parameters from the existing ones, create a new
+            # control and dutyfully call self.[load|ground|solve]().
+            testparms = dict(parameters,
+                             parts=parts,
+                             context=parameters['context'].avec(tester),
+                             solve_options={'on_model': tester.on_model})
+            # this is a very limited way of supplying the original command line arguments to the control
+            args = [a for a in testparms['arguments'] if a not in testparms['files']]
+            testcontrol = clingo.Control(args, logger=self.logger, message_limit=1)
             testcontrol.register_observer(tester)
-            testparameters['context'] =  parameters['context'].avec(tester)
-            self.load(testcontrol, testparameters)
-            self.ground(testcontrol, testparameters)
-            testparameters.setdefault('solve_options',{})['on_model'] = tester.on_model
-
-            self.solve(testcontrol, testparameters)
+            self.load(testcontrol, testparms)
+            self.ground(testcontrol, testparms)
+            self.solve(testcontrol, testparms)
             report = tester.report() | {'filename': filename, 'testname': prog_name}
             this.on_report(report)
         self.ground(control, parameters)
@@ -311,11 +302,11 @@ def we_CAN_NOT_i_repeat_NOT_reuse_control():
 
 @test
 def report_not_for_base_model_count():
-    t = Tester('filea.lp', 'harry', raiseifyouseeme=False)
+    t = Tester('filea.lp', 'harry')
     t._asserts['an'] = 'assert'
     with test.raises(AssertionError, 'filea.lp: harry: no models found.'):
         t.report()
-    t = Tester('fileb.lp', 'base', raiseifyouseeme=False)
+    t = Tester('fileb.lp', 'base')
     t._asserts['assert1'] = 'assert'
     r = t.report()
     test.eq({'asserts': {'assert1'}, 'models': 0}, r)
