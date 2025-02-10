@@ -105,20 +105,6 @@ def create_some_asserts():
             create_assert(Number(4), Number(2)))
 
 
-local = threading.local()
-
-
-def register(func):
-    """ Selftest uses the context for supplying the functions @all and @models to the ASP program. 
-        As a result the ASP program own Python functions are ignored. To reenable these, they must
-        be registered using register(func).
-    """
-    assert inspect.isfunction(func), f"{func!r} must be a function"
-    if tester := getattr(local, 'current_tester', None):  #TODO testme hasattr iso local.current_tester
-        tester.add_function(func)
-
-sys.modules['__main__'].register = register
-
 class Tester:
 
     def __init__(self, filename, name, raiseifyouseeme=True):
