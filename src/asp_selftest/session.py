@@ -62,7 +62,6 @@ class DefaultHandler:
     def parse(this, self, parameters):
         """ parse code in source or files into an ast, scans for
             processor directives and adds processors on the fly."""
-        assert parameters['files'] or parameters['source']
         parameters['ast'] = []
         append = parameters['ast'].append
         def add(node):
@@ -71,10 +70,11 @@ class DefaultHandler:
                 for method_name in ('prepare', 'parse'):
                     assert not hasattr(handler, method_name), f"{method_name!r} of {processor_name} can never be called."
             append(node)
-        if files := parameters['files']:
-            clingo.ast.parse_files(files, callback=add, logger=self.logger, message_limit=1)
         if source := parameters['source']:
-            clingo.ast.parse_string(source, callback=add, logger=self.logger, message_limit=1)
+            parse, code_source = clingo.ast.parse_string, source
+        else:
+            parse, code_source = clingo.ast.parse_files, parameters['files']
+        parse(code_source, callback=add, logger=self.logger, message_limit=1)
 
 
     def load(this, self, control, parameters):
