@@ -56,10 +56,11 @@ def main_clingo_app(tmp_path, stdout):
 
 
 # to be called from entry point in __main__
-def main_clingo_plus(arguments):
+def main_clingo_plus(clingo_options=(), programs=()):
     from .syntaxerrorhandler import SyntaxErrorHandler
-    with MainApp(handlers=[SyntaxErrorHandler()]) as app:
-        clingo_main(app, arguments)
+    from .tester import TesterHook
+    with MainApp(handlers=[TesterHook(), SyntaxErrorHandler()], programs=programs) as app:
+        clingo_main(app, clingo_options)
 
 
 @test

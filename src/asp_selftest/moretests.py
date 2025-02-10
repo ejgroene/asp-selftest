@@ -7,15 +7,15 @@ import clingo
 from clingo import Control
 
 from .arguments import parse, maybe_silence_tester
-from .__main__ import main, clingo_plus_tests
+from .__main__ import main, clingo_plus
 from .application import MainApp
-from .processors import SyntaxErrors
+from .syntaxerrorhandler import SyntaxErrorHandler
 from .tester import TesterHook
 from .runasptests import parse_and_run_tests, ground_exc
 from .utils import find_symbol
-from .application import main_main
+from .application import main_clingo_plus
 
-from .tester import local, register
+#from .tester import local, register
 
 
 import selftest
@@ -28,7 +28,7 @@ def register_python_function():
 #script (python)
 def repeat(message):
     return message
-register(repeat)
+#register(repeat)
 #end.
 
 #program test_me(base).
@@ -50,20 +50,13 @@ def reraise_unknown_exceptinos():
 #script (python)
 def exception_raiser():
     raise Exception("unknown")
-register(exception_raiser)
+#register(exception_raiser)
 #end.
 
 predicate(@exception_raiser()).
 """)
     with test.raises(Exception, 'unknown'):
         next(t)
-
-
-@test
-def extra_source():
-    c = ground_exc("a.", extra_src='b.')
-    test.eq('a', str(next(c.symbolic_atoms.by_signature('a', 0)).symbol))
-    test.eq('b', str(next(c.symbolic_atoms.by_signature('b', 0)).symbol))
 
 
 @test
@@ -98,32 +91,6 @@ def check_flags():
     test.truth(args.full_trace)
     test.eq(['asp_selftest.test_hook'], args.processor)
 
-
-
-@test
-def register_asp_function():
-    local.current_tester = None
-    def f(a):
-        test.eq(a, 'hello')
-    test.eq(None, local.current_tester)
-    register(f)
-    test.eq(None, local.current_tester)
-    fs = []
-    class X:
-        def add_function(self, f):
-            fs.append(f)
-            f('hello')
-    try:
-        local.current_tester = X()
-        register(f)
-        test.eq(f, fs[0])
-    finally:
-        local.current_tester = None
-
-
-@test
-def register_asp_function_is_function(raises:(AssertionError, "'aap' must be a function")):
-    register("aap")
 
 
 @test
@@ -164,9 +131,9 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
     f = tmp_path/'f.lp'
     f.write_text('a.\n')
     argv += [f.as_posix()]
-    clingo_plus_tests()
+    clingo_plus()
     s = stdout.getvalue().splitlines()
-    test.eq('clingo+tests version 5.7.1', s[0])
+    test.eq('clingo+ version 5.7.1', s[0])
     test.startswith(s[1], 'Reading from')
     test.endswith(s[1], 'f.lp')
     test.eq('ASPUNIT: base:  0 asserts,  1 model', s[2])
@@ -186,10 +153,10 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
 
 @test
 def warn_if_not_used_as_context():
-    app = MainApp(hooks=[SyntaxErrors()])
+    app = MainApp(handlers=[SyntaxErrorHandler()])
     with test.raises(
             AssertionError,
-            "MainApp.main must be run like: with MainApp() as m: m.main(...)") as e:
+            "MainApp.main only to be called within a context manager") as e:
         app.main(Control(), [])
         app.check()
 
@@ -199,7 +166,7 @@ def syntax_errors_basics(tmp_path):
     f = tmp_path/'f'
     f.write_text("a syntax error")
     with test.raises(SyntaxError) as e:
-        with MainApp(hooks=[SyntaxErrors()]) as app:
+        with MainApp(handlers=[SyntaxErrorHandler()]) as app:
             app.main(Control(), [f.as_posix()])
             app.check()
     test.eq('syntax error, unexpected <IDENTIFIER>', e.exception.msg)
@@ -214,7 +181,7 @@ def tester_runs_tests(tmp_path, stdout):
     assert(@all("fact")) :- fact(a).
     assert(@models(1)).
     """)
-    with MainApp(hooks=[TesterHook()]) as app:
+    with MainApp(handlers=[TesterHook()]) as app:
         app.main(Control(), [f.as_posix()])
     test.eq('ASPUNIT: base:  0 asserts,  1 model\nASPUNIT: test_fact:  2 asserts,  1 model\n',
             stdout.getvalue())
@@ -233,7 +200,7 @@ def clingo_dropin_default_hook_tests(tmp_path, argv, stdout):
     assert(@models(1)).
     """)
     argv += [f.as_posix()]
-    clingo_plus_tests()
+    clingo_plus()
     s = stdout.getvalue()
     test.contains(s, 'ASPUNIT: test_fact_1:  2 asserts,  1 model\n')
     test.contains(s, 'ASPUNIT: test_fact_2:  2 asserts,  1 model\n')
@@ -245,7 +212,7 @@ def clingo_dropin_default_hook_errors(tmp_path, argv, stdout):
     f.write_text("""syntax error """)
     argv += [f.as_posix()]
     with test.raises(SyntaxError, "syntax error, unexpected <IDENTIFIER>") as e:
-        clingo_plus_tests()
+        clingo_plus()
     test.contains(stdout.getvalue(), """UNKNOWN\n
 Models       : 0+""")
     test.eq(
@@ -265,7 +232,7 @@ assert(@all(@my_func("hello"))).
 assert(@models(1)).
     """)
     argv += [f.as_posix()]
-    clingo_plus_tests()
+    clingo_plus()
     s = stdout.getvalue()
     test.contains(s, "ASPUNIT: test_one:  2 asserts,  1 model")
     #test.contains(s, 'assert(models(1)) assert("hello")')
@@ -294,13 +261,12 @@ def multiple_bases_must_not_fail_with_duplicate_base(tmp_path):
     test.eq('#program base.', str(ast[2]))  # both f.lp and g.lp have a base
     test.eq('f.',             str(ast[3]))
     c = Control()
-    with MainApp(hooks=[TesterHook()]) as a:
+    with MainApp(handlers=[TesterHook()]) as a:
         a.main(c, [f])
-        a.check()
     test.eq('g', find_symbol(c, "g"))
 
 #@test
 def test_main_main(with_asp:("fail", 'f')):
     with test.raises(SystemExit, -1):
-        main_main(['base'], [with_asp], [])
+        main_clingo_plus(['base'], [with_asp], [])
 
