@@ -27,6 +27,7 @@ class CompoundContext:
 
     def add_context(self, *context):
         self._contexts += context
+        return self
 
 
     def __getattr__(self, name):
@@ -34,6 +35,11 @@ class CompoundContext:
             if f := getattr(c, name, None):
                 return f
         return getattr(sys.modules['__main__'], name)
+
+
+    def avec(self, context):
+        """ functional style new CompoundContext with one extra context """
+        return CompoundContext(*self._contexts, context)
 
 
 
@@ -107,10 +113,10 @@ class AspSession(Delegate):
     delegatees = (DefaultHandler(),)
 
 
-    def __init__(self, source=None, files=None, context=None, label=None, handlers=()):
+    def __init__(self, source=None, files=(), context=None, label=None, handlers=(), arguments=()):
         """ prepare source as string or from files for grounding and solving """
         self._spent_controls = set()
-        self.parameters = dict(source=source, files=files, context=context, label=label)
+        self.parameters = dict(source=source, files=files, context=context, label=label, arguments=arguments)  #TODO test arguments
         for handler in handlers:
             self.add_delegatee(handler)
 

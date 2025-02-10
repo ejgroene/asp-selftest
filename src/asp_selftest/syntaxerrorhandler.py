@@ -38,10 +38,11 @@ class SyntaxErrorHandler:
 
 
 
-def ground_exc(source=None, label='test', files=None, parts=None, observer=None, context=None):
+def ground_exc(source=None, label='test', files=(), parts=None, observer=None,  #TODO test files=() iso None
+               context=None, handlers=(), arguments=()):
     class Handler(ExceptionGuard):
 
-        def control(this, self, parameters):
+        def control(this, self, parameters):  #TODO add arguments
             control = self.control(parameters)
             if observer:
                 control.register_observer(observer)
@@ -61,7 +62,8 @@ def ground_exc(source=None, label='test', files=None, parts=None, observer=None,
 
     with Handler() as handler:
         s = AspSession(source=source, label=label, files=files,
-                        context=context, handlers=(SyntaxErrorHandler(), handler))
+                        context=context, handlers=handlers + (SyntaxErrorHandler(), handler),
+                       arguments=arguments)
         s.go_prepare()
         return s.go_ground(parts=parts)
 

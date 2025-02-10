@@ -121,7 +121,9 @@ sys.modules['__main__'].register = register
 
 class Tester:
 
-    def __init__(self, filename, name):
+    def __init__(self, filename, name, raiseifyouseeme=True):
+        if raiseifyouseeme:
+            raise Exception
         self.reset(filename, name)
 
 
@@ -251,57 +253,51 @@ class TesterHook:
     def __init__(this, on_report=print_test_result):
         this.programs = {}
         this.program_nodes = []
-        this.ast = []   # we keep a copy of the ast to load it for each test
         this.on_report = on_report
-        this.quit = False
 
     def parts(this):
         # TODO test sorting
         for node in sorted(this.program_nodes, key=lambda x: x.location.begin.filename):
             yield node.location.begin.filename, node.name, [(p.name, []) for p in node.parameters]
 
-    def parse(this, self, ctl, files, on_ast):
-        this.files = files
-        def filter(a):
-            if p := is_program(a):
-                this.program_nodes.append(a)
-                name, dependencies = p
+    def parse(this, self, parameters):
+        self.parse(parameters)
+        for node in parameters['ast']:
+            if program := is_program(node):
+                this.program_nodes.append(node)
+                name, dependencies = program
                 if name in this.programs and name != 'base':
                     raise Exception(f"Duplicate program name: {name!r}")
                 this.programs[name] = [(d, []) for d in dependencies]
-            on_ast(a)
-            this.ast.append(a)
-        self.parse(ctl, files, filter)
 
 
-    def ground(this, self, ctl, base_parts, context):
-        this.quit = False # TODO thing about something not on state of this
-        previous_file = None
+    def ground(this, self, control, parameters):
         for filename, prog_name, dependencies in this.parts():
-            #if filename != previous_file:
-            #    print(" ** Testing:", filename)
-            previous_file = filename
+            testparameters = parameters.copy()
             if prog_name.startswith('test_'):  # TODO better test
-                parts = base_parts + list(prog_with_dependencies(this.programs, prog_name, dependencies))
+                testparameters['parts'] = parameters.get('parts',()) + tuple(prog_with_dependencies(this.programs, prog_name, dependencies))
             elif prog_name == 'base':  # TODO better test
-                parts = (('base', ()),)
+                testparameters['parts'] = (('base', ()),)
             else:
                 continue
-            tester = Tester(filename, prog_name)
+            tester = Tester(filename, prog_name, raiseifyouseeme=False)
             # play nice with other hooks; maybe also add original arguments?
             # TODO TEST TEST
-            args = [a for a in self.arguments if a not in this.files]
-            control = clingo.Control(
-                    args, #['0']
-                    logger=self.logger,
-                    message_limit=self.message_limit)
-            control.register_observer(tester)
-            self.load(control, this.ast, parts=parts)
-            self.ground(control, parts, context=CompoundContext(tester, context))
-            self.solve(control, on_model=tester.on_model)
+            args = [a for a in testparameters['arguments'] if a not in testparameters['files']]
+            testcontrol = clingo.Control(
+                            args, #['0']
+                            logger=self.logger,
+                            message_limit=1)
+            testcontrol.register_observer(tester)
+            testparameters['context'] =  parameters['context'].avec(tester)
+            self.load(testcontrol, testparameters)
+            self.ground(testcontrol, testparameters)
+            testparameters.setdefault('solve_options',{})['on_model'] = tester.on_model
+
+            self.solve(testcontrol, testparameters)
             report = tester.report() | {'filename': filename, 'testname': prog_name}
             this.on_report(report)
-        self.ground(ctl, base_parts, context)
+        self.ground(control, parameters)
 
 
 from clingo.ast import ASTType
@@ -329,11 +325,11 @@ def we_CAN_NOT_i_repeat_NOT_reuse_control():
 
 @test
 def report_not_for_base_model_count():
-    t = Tester('filea.lp', 'harry')
+    t = Tester('filea.lp', 'harry', raiseifyouseeme=False)
     t._asserts['an'] = 'assert'
     with test.raises(AssertionError, 'filea.lp: harry: no models found.'):
         t.report()
-    t = Tester('fileb.lp', 'base')
+    t = Tester('fileb.lp', 'base', raiseifyouseeme=False)
     t._asserts['assert1'] = 'assert'
     r = t.report()
     test.eq({'asserts': {'assert1'}, 'models': 0}, r)

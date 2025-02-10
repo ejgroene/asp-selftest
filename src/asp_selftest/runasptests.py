@@ -8,11 +8,9 @@ import tempfile
 
 from clingo import Function, Number
 
-from .error_handling import AspSyntaxError
-from .application import MainApp
-from .processors import SyntaxErrors
 from .tester import TesterHook
-from .session import CompoundContext
+from .syntaxerrorhandler import AspSyntaxError, ground_exc
+
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -21,49 +19,11 @@ test = selftest.get_tester(__name__)
 default = lambda p: tuple(p) == (('base', ()), )
 
 
-def ground_exc(program, label='ASP-code', arguments=[], parts=(('base', ()),),
-               observer=None, context=None, extra_src=None,
-               control=None, trace=None,
-               hooks=()):
-    """ grounds an aps program turning messages/warnings into SyntaxErrors
-        it also solves; the function name is legacy
-    """
-    class Haak:
-        def ground(this, self, ctl, x_parts, x_context):
-            assert default(parts) or default(x_parts), [parts, x_parts]
-            if isinstance(x_context, CompoundContext):
-                x_context.add_context(context)
-            self.ground(ctl,
-                        x_parts if default(parts) else parts,
-                        x_context or context)
-    with tempfile.NamedTemporaryFile(mode='w', suffix=f"-{label}.lp") as f:
-        f.write(program if isinstance(program, str) else '\n'.join(program))
-        f.seek(0)
-        with MainApp(trace=trace,
-                     hooks=list(hooks) + [SyntaxErrors(), Haak()],
-                     arguments=arguments) as app:
-            ctl = clingo.Control(arguments, logger=app.logger, message_limit=app.message_limit)
-            if extra_src:
-                ctl.add(extra_src)
-            if observer:
-                ctl.register_observer(observer)
-            app.main(ctl, [f.name])
-
-    return ctl
-
-
-def ground_and_solve(lines, on_model=None, **kws):
-    control = ground_exc(lines, arguments=['0'], **kws)   # TODO this already solves
-    result = None
-    if on_model:
-        result = control.solve(on_model=on_model)
-    return control, result
-
 
 def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
     reports = []
     ctl = ground_exc(asp_code,
-                     hooks=list(hooks) + [TesterHook(on_report=lambda r: reports.append(r))],
+                     handlers=hooks + (TesterHook(on_report=lambda r: reports.append(r)),),
                      arguments=['0'])
     for r in reports:
         yield r
@@ -83,10 +43,10 @@ def simple_program():
         assert(@models(1)).
      """)
     data = next(t)
-    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     data = next(t)
-    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'test_fact', 'asserts': {'assert("facts")', 'assert(models(1))'}, 'models': 1}, data)
 
 
@@ -107,13 +67,13 @@ def dependencies():
         assert(@models(1)).
      """)
     data = next(t)
-    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     data = next(t)
-    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'test_base', 'asserts': {'assert("base_facts")', 'assert(models(1))'}, 'models': 1}, data)
     data = next(t)
-    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'test_one' , 'asserts': {'assert("one includes base")', 'assert(models(1))'}, 'models': 1}, data)
 
 
@@ -144,10 +104,10 @@ def warn_for_disjunctions():
         assert(@models(1)).
      """)
     data = next(t)
-    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     data = next(t)
-    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'test_base', 'asserts': {'assert(models(1))', 'assert(time_exists)'}, 'models': 1}, data)
 
 
@@ -162,10 +122,9 @@ def format_empty_model():
         next(r)
     p = tempfile.gettempdir()
     msg = str(e.exception)
-    test.startswith(msg, f"""MODEL:
+    test.eq(msg, f"""MODEL:
 <empty>
-Failures in {p}""")
-    test.endswith(msg, """, #program test_model_formatting():
+Failures in <string>, #program test_model_formatting():
 assert(test)
 """)
 
@@ -187,8 +146,7 @@ def format_model_small():
     test.startswith(msg, f"""MODEL:
 this_is_a_fact(1)
 this_is_a_fact(2)
-Failures in {p}""")
-    test.endswith(msg, f""", #program test_model_formatting():
+Failures in <string>, #program test_model_formatting():
 assert(test)
 """)
 
@@ -210,8 +168,7 @@ def format_model_wide():
     test.startswith(msg, f"""MODEL:
 this_is_a_fact(1)  this_is_a_fact(2)
 this_is_a_fact(3)
-Failures in {p}""")
-    test.endswith(msg, f""", #program test_model_formatting():
+Failures in <string>, #program test_model_formatting():
 assert(test)
 """)
 
@@ -237,7 +194,7 @@ def ensure_iso_python_call():
         test.contains(str(e), '#program base():\nassert("a")\n')
     t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(2).  ensure(assert("a")).')
     data = next(t)
-    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'base', 'asserts': {'assert("a")'}, 'models': 1}, data)
 
 
@@ -249,7 +206,7 @@ def alternative_models_predicate():
         models(1).
      """)
     data = next(t)
-    test.endswith(data.pop('filename'), '-ASP-code.lp')
+    test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'base', 'asserts': {'assert(1)'}, 'models': 1}, data)
 
 
@@ -266,10 +223,8 @@ def warning_about_duplicate_assert():
     with test.raises(Warning) as e:
         next(t)
     msg = str(e.exception)
-    test.startswith(msg,
-        'Duplicate: assert("A") (disjunction found) in test_one in /')
-    test.endswith(msg,
-        '-ASP-code.lp.')
+    test.eq(msg,
+        'Duplicate: assert("A") (disjunction found) in test_one in <string>.')
 
 
 @test

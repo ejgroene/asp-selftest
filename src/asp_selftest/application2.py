@@ -27,6 +27,7 @@ class MainApp(Application, AspSession, ExceptionGuard):
         #self.programs = programs  # TODO test
         #self.handlers = handlers  # TODO test
         #self.arguments = arguments  # TODO test
+        #self.parameters['arguments'] = arguments?
 
 
     @ExceptionGuard.guard
