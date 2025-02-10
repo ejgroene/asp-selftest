@@ -34,6 +34,7 @@ class ExceptionGuard(contextlib.AbstractContextManager):
                 if previous_exc := getattr(self, '_exception', False):
                     previous_exc.add_note(f"(followed by {e!r})")
                 else:
+                    e.add_note(f"Earlier raised by {function.__qualname__}")
                     self._exception = e
         return guarding
 
@@ -101,7 +102,8 @@ def clingo_logger_exception(tmp_path, stdout):
     with test.raises(SyntaxError, "first exception") as e:
         with app:
             clingo_main(app, ['test.lp'])
-    test.eq("(followed by RuntimeError('parsing failed'))", e.exception.__notes__[0])
+    test.eq("Earlier raised by clingo_logger_exception.<locals>.App.logger", e.exception.__notes__[0])
+    test.eq("(followed by RuntimeError('parsing failed'))", e.exception.__notes__[1])
     test.startswith(stdout.getvalue(), "clingo version ")
 
 
@@ -116,5 +118,6 @@ def do_not_mask_other_exceptions(stdout):
         with app:
             clingo_main(app, ['nothere.lp'])
             this_raises
-    test.eq("followed by: name 'this_raises' is not defined", e.exception.__notes__[0])
+    test.eq("Earlier raised by do_not_mask_other_exceptions.<locals>.App.main", e.exception.__notes__[0])
+    test.eq("followed by: name 'this_raises' is not defined", e.exception.__notes__[1])
     test.startswith(stdout.getvalue(), "clingo version ")

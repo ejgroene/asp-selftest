@@ -167,7 +167,10 @@ class AspSession(Delegate):
         module = importlib.import_module(modulename)
         handler_class = getattr(module, classname)
         handler = handler_class()
-        self.add_delegatee(handler)
+        try:
+            self.add_delegatee(handler)
+        except RuntimeError as e:
+            print("Ignoring duplicate handler:", e)
         return handler
 
 

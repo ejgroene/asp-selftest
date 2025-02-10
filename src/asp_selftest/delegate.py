@@ -48,7 +48,7 @@ class Delegate:
                     if handler in locals('handler'):
                         continue
                     return handler(self, *args, **kwargs)
-            seen = ', '.join(sorted(set(l.__qualname__ for l in locals('handler'))))
+            seen = ', '.join(sorted(d.__class__.__qualname__ for d in self.delegatees))
             raise AttributeError(f"{name!r} not found in: [{seen}]")
         delegatee.__name__ = name
         delegatee.__qualname__ = f"{self.__class__.__qualname__}.{name}"
@@ -64,6 +64,8 @@ class Delegate:
         if 'delegatees' not in self.__dict__:
             self.delegatees = list(self.delegatees)
         for d in delegatees:
+            if d.__class__ in (x.__class__ for x in self.delegatees):
+                raise RuntimeError(f'Duplicate delegatee class: {d.__class__.__qualname__}.')
             self.delegatees.insert(0, d)
 
 
@@ -105,7 +107,7 @@ def delegation_loop():
     class B(Delegate):
         delegated = ('f',)
         delegatees = (a,)
-    with test.raises(AttributeError, "'f' not found in: [delegation_loop.<locals>.A.f]"):
+    with test.raises(AttributeError, f"'f' not found in: [{A.__qualname__}]"):
         B().f()
 
 
@@ -124,7 +126,7 @@ def delegation_loop_back_forth():
         delegatees = (a, b)
     with test.raises(
             AttributeError,
-            "'f' not found in: [delegation_loop_back_forth.<locals>.A.f, delegation_loop_back_forth.<locals>.B.f]"):
+            f"'f' not found in: [{A.__qualname__}, {B.__qualname__}]"):
         C().f()
 
 
@@ -207,4 +209,13 @@ def use_explicit_delegation():
 
 @test
 def check_for_duplicates():
-    pass
+    class A:
+        pass
+    class B(Delegate):
+        pass
+    b = B()
+    b.add_delegatee(A())
+    with test.raises(RuntimeError, f"Duplicate delegatee class: {A.__qualname__}."):
+        b.add_delegatee(A())
+
+

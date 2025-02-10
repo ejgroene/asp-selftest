@@ -18,6 +18,7 @@ import asp_selftest.tester
 import asp_selftest.runasptests
 import asp_selftest.moretests
 import asp_selftest.reify
+import asp_selftest.reifyhandler
 
 
 coverage.stop()
