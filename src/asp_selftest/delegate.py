@@ -42,16 +42,16 @@ class Delegate:
     def __getattr__(self, name):
         if name not in self.delegated:
             raise AttributeError(f"'{name}' not marked for delegation")
-        def delegatee(*args, **kwargs):
-            for this in self.delegatees:
-                if handler := getattr(this, name, None):
-                    if handler in locals('handler'):
-                        continue
-                    return handler(self, *args, **kwargs)
+        for this in self.delegatees:
+            if handler := getattr(this, name, None):
+                if handler not in locals('handler'):
+                    break
+        else:
             seen = ', '.join(sorted(d.__class__.__qualname__ for d in self.delegatees))
             raise AttributeError(f"{name!r} not found in: [{seen}]")
-        delegatee.__name__ = name
-        delegatee.__qualname__ = f"{self.__class__.__qualname__}.{name}"
+        @functools.wraps(handler)
+        def delegatee(*args, **kwargs):
+            return handler(self, *args, **kwargs)
         return delegatee
 
 

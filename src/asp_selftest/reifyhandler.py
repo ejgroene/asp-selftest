@@ -40,34 +40,33 @@ THEORY_FILE = MY_PATH.with_name('reify.lp')
 class ReifyHandler:
 
     def load(this, self, control, parameters):
-        print("LOAD", control)
         parts = parameters.get('parts', None)
         if not parts:
             parts = [('base', ())] # + [(p, ()) for p in self.programs or []]
         ast = parameters['ast']
 
-        reify_ast(ast, parts, context=parameters['context'])
-
+        rules_added = set()
+        ground = True
+        while ground:
+            tmpcontrol = self.control(parameters)
+            self.load(tmpcontrol, parameters)
+            self.ground(tmpcontrol, parameters)
+            #control = quick_ground(ast, parts, context)
+            ground = False
+            for rule in reified_rules(tmpcontrol):
+                if rule not in rules_added:
+                    clingo.ast.parse_string(rule, ast.append)
+                    rules_added.add(rule)
+                    ground = True
         self.load(control, parameters)
 
 
     def logger(this, self, code, message):
-        print("LOGGER", code)
         if code == clingo.MessageCode.AtomUndefined:
+            return True
             pass #self.suppress_logger(code)
-        else:
-            self.logger(code, message)
-
-
-
-def reify(code=None, label=None, control=None, parts=(('base',()),)):
-    """ Test helper.  Outputs reified rules in text form. """
-    control = clingo.Control(
-        # do not warn about yet to be reified atoms
-        arguments=['--warn', 'no-atom-undefined'])
-    control.add(code)
-    control.ground()
-    return reified_rules(control)
+        #else:
+        #    self.logger(code, message)
 
 
 def to_symbol(theory_term):
@@ -107,58 +106,6 @@ def make_function_from_symbols():
         test.eq('naam(b,a)', str(make_function(a.term.arguments)))
 
 
-def parse_asp(asp_code):
-    ast = []
-    clingo.ast.parse_string(asp_code, ast.append, logger=print)
-    return ast
-
-
-def load_ast(ast, control):
-    with clingo.ast.ProgramBuilder(control) as pb:
-        add = pb.add
-        for a in ast:
-            add(a)
-
-class NoopObserver:
-    # optimization: avoid calling solver
-    pass
-
-
-def quick_ground(ast, parts, context):
-    messages = []
-    control = clingo.Control(
-            ['--warn', 'no-atom-undefined'],
-            logger=lambda code, msg: messages.append(msg))
-    noopobserver = NoopObserver()
-    control.register_observer(noopobserver, replace=True)
-    load_ast(ast, control)
-    print("quick_ground:", parts)
-    control.ground(parts, context=context)
-    if messages:
-        raise Exception(messages[0])
-    return control
-
-
-def reify_ast(ast, parts, context=None):
-    rules_added = set()
-    ground = True
-    print("Reify AST", parts)
-    while ground:
-
-        # Zo?
-        #delegate.ground(control, parameters)
-
-        control = quick_ground(ast, parts, context)
-        ground = False
-        for rule in reified_rules(control):
-            if rule not in rules_added:
-                clingo.ast.parse_string(rule, ast.append)
-                rules_added.add(rule)
-                ground = True
-                #print(rule, file=open('reified_rules.log', 'a'))
-    return ast
-        
-
 def reified_rules(control):
 
     def reifies():
@@ -194,12 +141,13 @@ def reified_rules(control):
             yield f"#external {head}.\n"
 
 
-def test_reify(asp, reified):
+def test_reify(asp, reified, parts=None, context=None):
     if "&rule" in asp:
         asp += f'#include "{THEORY_FILE}".\n'
-    control = ground_exc(asp, handlers=(ReifyHandler(),))
+    control = ground_exc(asp, handlers=(ReifyHandler(),), parts=parts, context=context)
     new_rules = reified_rules(control)
     test.eq(reified.strip(), ''.join(new_rules).strip())
+    return control
 
 
 @test
@@ -332,34 +280,34 @@ a(1,2) :- b(3), c(4), d(5).
 """)
 
 
+def quick_parse_asp(code):
+    ast = []
+    clingo.ast.parse_string(code, ast.append, logger=print)
+    return ast
+
+
 @test
-def reify_until_done(stderr):
-    ast = parse_asp(
+def reify_until_done():
+    control = test_reify(
     f'#include "{THEORY_FILE}".'"""
     a.
     &rule(b) { a }.
-    &rule(c) {} :- b.
-    """)
-    ast = reify_ast(ast, [('base', ())])
-    ctl = clingo.Control()
-    load_ast(ast, ctl)
-    ctl.ground()
-    test.eq({'a', 'b', 'c'}, {str(a.symbol) for a in ctl.symbolic_atoms})
-    test.eq(stderr.getvalue(), '')
+    &rule(c) {} :- b.  % not instantiated until b is True
+    """,
+    "#external c.\nb :- a.")
+    test.eq({'a', 'b', 'c'}, {str(a.symbol) for a in control.symbolic_atoms})
 
 
 @test
 def reify_with_disappering_atoms(stderr):
-    ast = parse_asp("""
+    control = test_reify("""
             a.
             none(notgeel) :-  not geel.  % these cannot
             none(geel)    :-  geel.      % both be true
             rule(geel, a).
+            """, """
+            geel :- a.
             """)
-    ast = reify_ast(ast, [('base', ())])
-    control = clingo.Control()
-    load_ast(ast, control)
-    control.ground([('base', ())])
     symbols = {str(sa.symbol) for sa in control.symbolic_atoms}
     test.contains(symbols, 'none(geel)')
     test.comp.contains(symbols, 'none(notgeel)')
@@ -367,25 +315,23 @@ def reify_with_disappering_atoms(stderr):
 
 @test
 def reify_with_disappering_atoms_in_different_programs(stderr):
-    ast = parse_asp("""
+    def reify(program_name):
+        asp_code = """
             none(notgeel) :-  not geel.
             none(geel)    :-  geel.
             rule(geel, a).
             #program test_a.
             a.
             #program test_not_a.
-            """)
-    def reified_symbols(program_name):
-        parts = [('base', ()), (program_name, ())]
-        reify_ast(ast, parts)
-        control = clingo.Control()
-        load_ast(ast, control)
-        control.ground(parts)
+            """
+        control = test_reify(asp_code, "geel :- a.", parts=[('base', ()), (program_name, ())])
         return {str(sa.symbol) for sa in control.symbolic_atoms}
-    symbols = reified_symbols('test_a')
+
+    symbols = reify('test_a')
     test.contains(symbols, 'none(geel)')
     test.comp.contains(symbols, 'none(notgeel)')
-    symbols = reified_symbols('test_not_a')
+
+    symbols = reify('test_not_a')
     test.contains(symbols, 'none(notgeel)')
     test.comp.contains(symbols, 'none(geel)')
 
@@ -396,15 +342,13 @@ def reify_with_context(stderr):
         @staticmethod
         def zeep():
             return clingo.String("sop")
-    ast = parse_asp("""
-            b(@zeep).
-            a.
-            rule(geel, a).
-            """)
-    ast = reify_ast(ast, [('base', ())], Context)
-    control = clingo.Control()
-    load_ast(ast, control)
-    control.ground([('base', ())], context=Context)
+    control = test_reify("""
+                         b(@zeep).
+                         a.
+                         rule(geel, a).
+                         """,
+                         "geel :- a.",
+                         context=Context())
     symbols = {str(sa.symbol) for sa in control.symbolic_atoms}
     test.contains(symbols, 'b("sop")')
 

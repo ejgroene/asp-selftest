@@ -22,6 +22,8 @@ class SyntaxErrorHandler:
 
 
     def logger(this, self, code, message):
+        if self.logger(code, message):
+            return
         if code == clingo.MessageCode.FileIncluded:
             # always ignore duplicate includes, only warn. @TODO TESTME
             print("Ignoring duplicate #include:", message, file=sys.stderr)
