@@ -18,7 +18,6 @@ import asp_selftest.runasptests
 
 
 #import asp_selftest.reify
-#import asp_selftest.application
 #import asp_selftest.processors
 #import asp_selftest.moretests
 
