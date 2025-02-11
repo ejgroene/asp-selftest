@@ -60,13 +60,13 @@ class Delegate:
         return delegatee(*args, **kwargs)
 
 
-    def add_delegatee(self, *delegatees):
+    def add_delegatee(self, *delegatees, position=0):
         if 'delegatees' not in self.__dict__:
             self.delegatees = list(self.delegatees)
         for d in delegatees:
             if d.__class__ in (x.__class__ for x in self.delegatees):
                 raise RuntimeError(f'Duplicate delegatee class: {d.__class__.__qualname__}.')
-            self.delegatees.insert(0, d)
+            self.delegatees.insert(position, d)
 
 
 @test
@@ -219,3 +219,19 @@ def check_for_duplicates():
         b.add_delegatee(A())
 
 
+@test
+def only_look_up():
+    class A:
+        def f(this, self):
+            return "A" + self.g()
+    class B:
+        def g(this, self):
+            return "B" + self.f()
+    class C:
+        def f(this, self):
+            return 'C.f'
+    class D(Delegate):
+        delegated = 'fg'
+        delegatees = (A(), B(), C())
+    d = D()
+    test.eq('ABC.f', d.f())

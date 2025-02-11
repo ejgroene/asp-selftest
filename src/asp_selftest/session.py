@@ -49,7 +49,7 @@ class DefaultHandler:
 
     def control(this, self, parameters):
         """ if no one did something smart, we create a default control """
-        return clingo.Control(logger=self.logger)
+        return clingo.Control(logger=self.logger, message_limit=1)
 
 
     def prepare(this, self, parameters):
@@ -66,7 +66,7 @@ class DefaultHandler:
         append = parameters['ast'].append
         def add(node):
             if processor_name := is_processor_predicate(node):
-                handler = self.add_handler(processor_name)
+                handler = self.add_handler_by_name(processor_name, -1, log=True)
                 for method_name in ('prepare', 'parse'):
                     assert not hasattr(handler, method_name), f"{method_name!r} of {processor_name} can never be called."
             append(node)
@@ -118,7 +118,7 @@ class AspSession(Delegate):
         self._spent_controls = set()
         self.parameters = dict(source=source, files=files, context=context, label=label, arguments=arguments)  #TODO test arguments
         for handler in handlers:
-            self.add_delegatee(handler)
+            self.add_handler(handler)
 
 
     def __call__(self, control=None, parts=None, **solve_options):
@@ -161,17 +161,24 @@ class AspSession(Delegate):
         return self.parameters[name]
 
 
-    def add_handler(self, handler_name):
+    def add_handler(self, handler, position=0, log=False):
+        try:
+            self.add_delegatee(handler, position=position)
+        except RuntimeError as e:
+            print("Ignoring duplicate handler:", e)
+        if log:
+            print("Installed handlers:", file=sys.stderr)
+            for h in self.delegatees:
+                print(" -", h.__class__.__qualname__, file=sys.stderr)
+        return handler
+
+
+    def add_handler_by_name(self, handler_name, position=0, log=False):
         print("Inserting handler:", handler_name, file=sys.stderr)
         modulename, classname = handler_name.rsplit(':' if ':' in handler_name else '.', 1)
         module = importlib.import_module(modulename)
         handler_class = getattr(module, classname)
-        handler = handler_class()
-        try:
-            self.add_delegatee(handler)
-        except RuntimeError as e:
-            print("Ignoring duplicate handler:", e)
-        return handler
+        return self.add_handler(handler_class(), position=position, log=log)
 
 
 @test
@@ -252,7 +259,7 @@ def add_hook_in_ASP(stderr):
     list(session.go_solve(control=ctl, yield_=True))
     test.eq('bee', find_symbol(ctl, "bee"))
     test.eq('testhook(ground)', find_symbol(ctl, "testhook", 1))
-    test.eq('Inserting handler: asp_selftest.session:TestHaak\n', stderr.getvalue())
+    test.eq('Inserting handler: asp_selftest.session:TestHaak\nInstalled handlers:\n - TestHaak\n - DefaultHandler\n', stderr.getvalue())
 
 
 # for testing hooks

@@ -28,7 +28,7 @@ dependencies=[
 asp-tests    = "asp_selftest.__main__:main"
 clingo-tests = "asp_selftest.__main__:clingo_plus_tests"
 "clingo+"    = "asp_selftest.__main__:clingo_plus"
-asp-reify    = "asp_selftest.__main__:reify"
+asp-reify    = "asp_selftest.__main__:asp_reify"
 
 
 [tool.setuptools]
