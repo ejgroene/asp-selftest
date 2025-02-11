@@ -37,6 +37,15 @@ THEORY_PATH = MY_PATH.parent
 THEORY_FILE = MY_PATH.with_name('reify.lp')
 
 
+def asp_reify(code):
+    """ support for reifying a snippet of ASP (entry point asp-reify)"""
+    # TODO make use of ground_exc
+    control = clingo.Control(arguments=['--warn', 'no-atom-undefined'])
+    control.add(code)
+    control.ground()
+    return reified_rules(control)
+
+
 class ReifyHandler:
 
     def load(this, self, control, parameters):
@@ -49,9 +58,10 @@ class ReifyHandler:
         ground = True
         while ground:
             tmpcontrol = self.control(parameters)
+            args = ()
+            tmpcontrol = clingo.Control(args, logger=self.logger, message_limit=1)
             self.load(tmpcontrol, parameters)
             self.ground(tmpcontrol, parameters)
-            #control = quick_ground(ast, parts, context)
             ground = False
             for rule in reified_rules(tmpcontrol):
                 if rule not in rules_added:
@@ -64,9 +74,6 @@ class ReifyHandler:
     def logger(this, self, code, message):
         if code == clingo.MessageCode.AtomUndefined:
             return True
-            pass #self.suppress_logger(code)
-        #else:
-        #    self.logger(code, message)
 
 
 def to_symbol(theory_term):

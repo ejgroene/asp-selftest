@@ -65,3 +65,15 @@ def parse_clingo_plus_args(argv=None):
             allow_abbrev = False)
     args.add_argument('-p', '--programs', nargs='+', help="specify #program's to ground")
     return args.parse_known_args(argv)
+
+
+def parse_reify(argv=None):
+    p = argparse.ArgumentParser(
+            parents=[silent],
+            prog = 'reify',
+            description="Reads ASP from STDIN, reifies reify() and &reify{} predicates into #program reified."
+        )
+    p.add_argument('--include-source', help='Output source just before reified rules.', action='store_true')
+    p.add_argument('--print-include-path', help='Print the path of "reify.lp" to stdout.', action='store_true')
+    return p.parse_args(argv)
+

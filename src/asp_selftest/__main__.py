@@ -54,3 +54,21 @@ def clingo_plus():
     #        s.print_stats(.01)
 
 
+def asp_reify(): # entry point
+    from .arguments import maybe_silence_tester
+    maybe_silence_tester()
+    from .arguments import parse_reify
+    from .reifyhandler import asp_reify
+    """ Read ASP, interpreting reify()  and &reify{} predicates. """
+    args = parse_reify()
+    if args.print_include_path:
+        from .reifyhandler import THEORY_PATH
+        print(THEORY_PATH)
+    else:
+        asp_code = sys.stdin.read()
+        reifies = asp_reify(asp_code)
+        if args.include_source:
+            print(asp_code)
+        print(''.join(reifies))
+
+

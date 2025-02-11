@@ -2,12 +2,15 @@
 """ Program argument and in-source test handling + some tests that introduce cyclic dependencies elsewhere. """
 
 import io
+import sys
+
 
 import clingo
 from clingo import Control
 
-from .arguments import parse, maybe_silence_tester
-from .__main__ import main, clingo_plus
+
+from .arguments import parse, maybe_silence_tester, parse_reify
+from .__main__ import main, clingo_plus, asp_reify
 from .application import MainApp
 from .syntaxerrorhandler import SyntaxErrorHandler
 from .tester import TesterHook
@@ -15,11 +18,33 @@ from .runasptests import parse_and_run_tests, ground_exc
 from .utils import find_symbol
 from .application import main_clingo_plus
 
-#from .tester import local, register
-
 
 import selftest
 test = selftest.get_tester(__name__)
+
+
+@test
+def test_reify_args():
+    args = parse_reify(['--include-source'])
+    test.truth(args.include_source)
+
+
+@test
+def reify_entry_point(stdout, stdin, argv):
+    argv += ['--include-source']
+    class FU:
+        def read(self):
+            return 'rule(aap).'
+    sys.stdin = FU()
+    asp_reify()
+    test.eq('rule(aap).\n#external aap.\n\n', stdout.getvalue())
+
+
+@test
+def reify_print_path(stdout, argv):
+    argv += ['--print-include-path']
+    asp_reify()
+    test.endswith(stdout.getvalue(), "/src/asp_selftest\n")
 
 
 @test

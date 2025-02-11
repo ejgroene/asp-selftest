@@ -48,6 +48,7 @@ def ground_exc(source=None, label='test', files=(), parts=None, observer=None,  
     class Handler(ExceptionGuard):
 
         def control(this, self, parameters):  #TODO add arguments
+            ## NB: this is a factory method: do not share observers! TODO
             control = self.control(parameters)
             if observer:
                 control.register_observer(observer)
