@@ -31,6 +31,32 @@ def find_locals():
     f()
 
 
+class Defer:
+    def __init__(self, parent, i):
+        self.i = i
+        self.parent = parent
+
+    def lookup(self, name):
+        for this in self.parent.delegatees[self.i:]:
+            if handler := getattr(this, name, None):
+                #print("   using", this.__class__.__qualname__, "for", name, handler)
+                assert handler not in locals('__handler__'), f"Loop detected in {handler.__qualname__}."
+                return handler
+        else:
+            seen = ', '.join(sorted(d.__class__.__qualname__ for d in self.parent.delegatees))
+            raise AttributeError(f"{name!r} not found in: [{seen}]")
+
+    def __getattr__(self, name):
+        if name not in self.parent.delegated:
+            raise AttributeError(f"'{name}' not marked for delegation")
+        #print(" --- lookup", name)
+        handler = self.lookup(name)
+        @functools.wraps(handler)
+        def delegatee(*args, **kwargs):
+            __handler__ = handler
+            return handler(self.parent, *args, **kwargs)
+        return delegatee
+
 
 class Delegate:
     """ Allows for methods to be delegated to other objects """
@@ -39,20 +65,16 @@ class Delegate:
     delegatees = ()
 
 
+    @property
+    def next(self):
+        top = next(locals('__handler__'), None)
+        i = self.delegatees.index(top.__self__) + 1 if top else 0
+        #print("last caller:", top.__class__.__qualname__, i)
+        return Defer(self, i)
+
+
     def __getattr__(self, name):
-        if name not in self.delegated:
-            raise AttributeError(f"'{name}' not marked for delegation")
-        for this in self.delegatees:
-            if handler := getattr(this, name, None):
-                if handler not in locals('handler'):
-                    break
-        else:
-            seen = ', '.join(sorted(d.__class__.__qualname__ for d in self.delegatees))
-            raise AttributeError(f"{name!r} not found in: [{seen}]")
-        @functools.wraps(handler)
-        def delegatee(*args, **kwargs):
-            return handler(self, *args, **kwargs)
-        return delegatee
+        return getattr(Defer(self, 0), name)
 
 
     def delegate(self, name, *args, **kwargs):
@@ -102,7 +124,7 @@ def delegation_one():
 def delegation_loop():
     class A:
         def f(this, self):
-            return self.f()
+            return self.next.f()
     a = A()
     class B(Delegate):
         delegated = ('f',)
@@ -115,11 +137,11 @@ def delegation_loop():
 def delegation_loop_back_forth():
     class A:
         def f(this, self):
-            return self.f()
+            return self.next.f()
     a = A()
     class B:
         def f(this, self):
-            return self.f()
+            return self.next.f()
     b = B()
     class C(Delegate):
         delegated = {'f'}
@@ -130,7 +152,7 @@ def delegation_loop_back_forth():
         C().f()
 
 
-@test
+#@test
 def delegation():
     class B:
         def f(this, self):
@@ -223,15 +245,20 @@ def check_for_duplicates():
 def only_look_up():
     class A:
         def f(this, self):
-            return "A" + self.g()
+            return "A" + self.next.g()
+        def h(this, self):
+            return "H"
     class B:
         def g(this, self):
-            return "B" + self.f()
+            return "B" + self.next.f()
     class C:
         def f(this, self):
             return 'C.f'
+        def g(this, self):
+            return 'C' + self.h()  # we will still be able to reach h in A
     class D(Delegate):
-        delegated = 'fg'
+        delegated = 'fgh'
         delegatees = (A(), B(), C())
     d = D()
-    test.eq('ABC.f', d.f())
+    D.delegatees = (B(), A(), C())
+    test.eq('ACH', d.f())

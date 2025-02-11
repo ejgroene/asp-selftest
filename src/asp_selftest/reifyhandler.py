@@ -60,15 +60,15 @@ class ReifyHandler:
             tmpcontrol = self.control(parameters)
             args = ()
             tmpcontrol = clingo.Control(args, logger=self.logger, message_limit=1)
-            self.load(tmpcontrol, parameters)
-            self.ground(tmpcontrol, parameters)
+            self.next.load(tmpcontrol, parameters)
+            self.next.ground(tmpcontrol, parameters)
             ground = False
             for rule in reified_rules(tmpcontrol):
                 if rule not in rules_added:
                     clingo.ast.parse_string(rule, ast.append)
                     rules_added.add(rule)
                     ground = True
-        self.load(control, parameters)
+        self.next.load(control, parameters)
 
 
     def logger(this, self, code, message):

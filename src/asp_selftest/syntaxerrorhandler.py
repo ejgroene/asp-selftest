@@ -22,7 +22,7 @@ class SyntaxErrorHandler:
 
 
     def logger(this, self, code, message):
-        if self.logger(code, message):
+        if self.next.logger(code, message):
             return
         if code == clingo.MessageCode.FileIncluded:
             # always ignore duplicate includes, only warn. @TODO TESTME
@@ -49,18 +49,18 @@ def ground_exc(source=None, label='test', files=(), parts=None, observer=None,  
 
         def control(this, self, parameters):  #TODO add arguments
             ## NB: this is a factory method: do not share observers! TODO
-            control = self.control(parameters)
+            control = self.next.control(parameters)
             if observer:
                 control.register_observer(observer)
             return control
 
         @ExceptionGuard.guard
         def logger(this, self, code, message):
-            self.logger(code, message)
+            self.next.logger(code, message)
 
     with Handler() as handler:
         session = AspSession(source=source, label=label, files=files,
-                             context=context, handlers=handlers + (SyntaxErrorHandler(), handler),
+                             context=context, handlers=(*handlers, handler, SyntaxErrorHandler()),
                              arguments=arguments)
         session.go_prepare()
         return session.go_ground(parts=parts)

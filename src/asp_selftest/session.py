@@ -117,7 +117,7 @@ class AspSession(Delegate):
         """ prepare source as string or from files for grounding and solving """
         self._spent_controls = set()
         self.parameters = dict(source=source, files=files, context=context, label=label, arguments=arguments)  #TODO test arguments
-        for handler in handlers:
+        for handler in reversed(handlers):  # TODO test reversal
             self.add_handler(handler)
 
 
@@ -165,7 +165,7 @@ class AspSession(Delegate):
         try:
             self.add_delegatee(handler, position=position)
         except RuntimeError as e:
-            print("Ignoring duplicate handler:", e)
+            print("Ignoring duplicate handler:", e, file=sys.stderr)  # TODO test stderr
         if log:
             print("Installed handlers:", file=sys.stderr)
             for h in self.delegatees:
@@ -247,7 +247,7 @@ def hook_basics():
 class TestHaak:
     def ground(this, self, control, parameters):
         control.add('testhook(ground).')
-        self.ground(control, parameters)
+        self.next.ground(control, parameters)
 
 
 @test
@@ -285,11 +285,11 @@ def multiple_hooks():
     class Hook1():
         def ground(this, self, control, parameters):
             control.add('hook_1.')
-            self.ground(control, parameters)
+            self.next.ground(control, parameters)
     class Hook2():
         def ground(this, self, control, parameters):
             control.add('hook_2.')
-            self.ground(control, parameters)
+            self.next.ground(control, parameters)
     h1 = Hook1()
     h2 = Hook2()
     session.add_delegatee(h1)
@@ -328,10 +328,10 @@ def select_parts():
     test.truth(models[0].contains(clingo.Function('c')))
 
 
-class Handler:
+class ThreeContextsHandler:
     def ground(this, self, control, parameters):
         parameters['context'].add_context(this)
-        self.ground(control, parameters)
+        self.next.ground(control, parameters)
     def b(this):
         return  clingo.Number(19)
 
@@ -342,7 +342,7 @@ def three_contexts():
         def a(self):
             return clingo.Number(42)
     s = AspSession(f"""
-processor("{__name__}.{Handler.__qualname__}").
+processor("{__name__}.{ThreeContextsHandler.__qualname__}").
 #script (python)
 import clingo
 def c():
@@ -353,5 +353,5 @@ a(@a()). b(@b()). c(@c()).
             context=Context())
     s.go_prepare()
     c = s.go_ground()
-    test.eq(['a(42)', 'b(19)', 'c(88)', 'processor("asp_selftest.session.Handler")'],
+    test.eq(['a(42)', 'b(19)', 'c(88)', 'processor("asp_selftest.session.ThreeContextsHandler")'],
             [str(a.symbol) for a in c.symbolic_atoms])

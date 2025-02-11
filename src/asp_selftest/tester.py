@@ -237,7 +237,7 @@ class TesterHook:
             yield node.location.begin.filename, node.name, [(p.name, []) for p in node.parameters]
 
     def parse(this, self, parameters):
-        self.parse(parameters)
+        self.next.parse(parameters)
         for node in parameters['ast']:
             if program := is_program(node):
                 this.program_nodes.append(node)
@@ -252,7 +252,7 @@ class TesterHook:
         """ Grounds and solves the *whole* program for *each* #program test_<name> found. """
         for filename, prog_name, dependencies in this._parts:
             if prog_name.startswith('test_'):  # TODO better test
-                parts = parameters.get('parts',()) + tuple(prog_with_dependencies(this.programs, prog_name, dependencies))
+                parts = (*parameters.get('parts',()), *prog_with_dependencies(this.programs, prog_name, dependencies))
             elif prog_name == 'base':  # TODO better test
                 parts = (('base', ()),)
             else:
@@ -270,11 +270,11 @@ class TesterHook:
             testcontrol = clingo.Control(args, logger=self.logger, message_limit=1)
             testcontrol.register_observer(tester)
             self.load(testcontrol, testparms)
-            self.ground(testcontrol, testparms)
+            self.next.ground(testcontrol, testparms)
             self.solve(testcontrol, testparms)
             report = tester.report() | {'filename': filename, 'testname': prog_name}
             this.on_report(report)
-        self.ground(control, parameters)
+        self.next.ground(control, parameters)
 
 
 from clingo.ast import ASTType
