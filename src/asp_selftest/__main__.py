@@ -47,11 +47,13 @@ def clingo_plus():
     #import pstats
     #with cProfile.Profile() as p:
     #    try:
-    #        main_main(opts.programs, remaining, hooks=[TesterHook(), SyntaxErrors()])
-    #    except BaseException:
+    #        main_clingo_plus(clingo_options, programs=plus_options.programs)
+    #    finally:
     #        s = pstats.Stats(p, stream=sys.stderr)
+    #        s.dump_stats('profile.prof')
+    #        #s.sort_stats('cumulative')
     #        s.sort_stats('time')
-    #        s.print_stats(.01)
+    #        s.print_stats(.1)
 
 
 def asp_reify(): # entry point
