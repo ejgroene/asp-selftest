@@ -13,11 +13,13 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
+SymbolTypeFunction = clingo.SymbolType.Function
+
 from .session import CompoundContext
 
 
 def has_name(symbol, name):
-   return symbol.type == clingo.SymbolType.Function and symbol.name == name
+   return symbol.type == SymbolTypeFunction and symbol.name == name
 
 
 def print_test_result(result):
@@ -153,15 +155,20 @@ class Tester:
     def on_model(self, model):
         """ Callback when model is found; count model and check all asserts. """
         if self._models_soll == -1:
-            models = next((s for s in model.symbols(shown=True) if has_name(s, 'models')),
-                          None)
+            models = next(model.context.symbolic_atoms.by_signature('models', 1), None)
+            #models = next((s for s in model.symbols(shown=True) if has_name(s, 'models')),  # TODO use by_signature
+            #              None)
             if models:
-                self._models_soll = models.arguments[0].number
+                self._models_soll = models.symbol.arguments[0].number
         self._models_ist += 1
 
-        for s in model.symbols(atoms=True):
-            if has_name(s, 'none'):
-                self.constraints.append(s)
+        #for s in model.symbols(atoms=True):
+        #    if has_name(s, 'none'):
+        #        self.constraints.append(s)
+
+        for a in model.context.symbolic_atoms.by_signature('none', 1):
+            if a.is_fact:
+                self.constraints.append(a.symbol)
 
         for a, s in self._symbols.items():
             body = self._rules[a]
@@ -170,7 +177,9 @@ class Tester:
                         Warning(f"Duplicate: {s} (disjunction found) in {self._name} in {self._filename}."))
                 return False
 
-        for ensure in (s for s in model.symbols(atoms=True) if has_name(s, 'ensure')):
+        #for ensure in (s for s in model.symbols(atoms=True) if has_name(s, 'ensure')):
+        for a in model.context.symbolic_atoms.by_signature('ensure', 1):
+            ensure = a.symbol
             fact = ensure.arguments[0]
             self.add_assert(fact)
 
@@ -262,6 +271,7 @@ class TesterHook:
             # so we derive our parameters from the existing ones, create a new
             # control and dutyfully call self.[load|ground|solve]().
             testparms = dict(parameters,
+                             ast=parameters['ast'][:],    # don't let it grow with each test
                              parts=parts,
                              context=parameters['context'].avec(tester),
                              solve_options={'on_model': tester.on_model})
