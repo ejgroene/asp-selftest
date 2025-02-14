@@ -326,14 +326,18 @@ def constraints_are_more_better(stdout):
     t = parse_and_run_tests("""
         #program test_constraints.
         a.
-        none("not in a single model")  :-  a.
+        b(1).
+        none("not in any model")  :-  a.
+        none("not in any model", B)  :-  b(B).
     """)
     with test.raises(AssertionError) as e:
         next(t)
-    test.startswith(str(e.exception), """MODEL:
-a                              none("not in a single model")
-Failures in """)
-    test.endswith(str(e.exception), '#program test_constraints():\nnone("not in a single model")\n')
+    test.eq("""MODEL:
+a                           b(1)                        none("not in any model")    none("not in any model",1)
+Failures in <string>, #program test_constraints():
+none("not in any model"), none("not in any model",1)
+""",
+            str(e.exception))
 
 
 # more tests in moretests.py to avoid circular imports

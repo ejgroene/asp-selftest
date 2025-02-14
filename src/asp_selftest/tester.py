@@ -154,19 +154,14 @@ class Tester:
 
     def on_model(self, model):
         """ Callback when model is found; count model and check all asserts. """
+        by_signature = model.context.symbolic_atoms.by_signature
         if self._models_soll == -1:
-            models = next(model.context.symbolic_atoms.by_signature('models', 1), None)
-            #models = next((s for s in model.symbols(shown=True) if has_name(s, 'models')),  # TODO use by_signature
-            #              None)
+            models = next(by_signature('models', 1), None)
             if models:
                 self._models_soll = models.symbol.arguments[0].number
         self._models_ist += 1
 
-        #for s in model.symbols(atoms=True):
-        #    if has_name(s, 'none'):
-        #        self.constraints.append(s)
-
-        for a in model.context.symbolic_atoms.by_signature('none', 1):
+        for a in itertools.chain(by_signature('none', 1), by_signature('none', 2)):  # TODO test /2
             if a.is_fact:
                 self.constraints.append(a.symbol)
 
