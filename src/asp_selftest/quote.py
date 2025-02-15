@@ -39,24 +39,15 @@ def reified_rules(asp):
             name = symbol.name
             arguments = symbol.arguments
             if name == 'quote':
-                name, *arguments = symbol.arguments
-                if arguments:
-                    new_args = [quote(a) for a in arguments]
-                    if new_args:
-                        return f"{name}({','.join(new_args)})"
-                    return str(name)
-                return quote(name)
-            if name == 'var':
-                assert len(symbol.arguments) == 1, symbol
-                arg = symbol.arguments[0]
-                assert arg.type == SymbolType.String
-                return arg.string
-            else:
-                arguments = symbol.arguments
-                new_args = [quote(a) for a in arguments]
-                if new_args:
-                    return f"{name}({','.join(new_args)})"
-                return str(name)
+                name, *arguments = arguments
+                name = quote(name)
+            elif name == 'var':
+                name, *arguments = arguments
+                name = name.string
+            if arguments:
+                arguments = map(quote, arguments)
+                return f"{name}({','.join(arguments)})"
+            return str(name)
         return str(symbol)
 
     get = rc.symbols.__getitem__
