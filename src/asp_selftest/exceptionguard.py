@@ -32,7 +32,8 @@ class ExceptionGuard(contextlib.AbstractContextManager):
                 return function(self, *a, **k)
             except Exception as e:
                 if previous_exc := getattr(self, '_exception', False):
-                    previous_exc.add_note(f"(followed by {e!r})")
+                    note = f"(followed by {type(e).__name__}: {e})"
+                    previous_exc.add_note(note)
                 else:
                     e.add_note(f"Earlier raised by {function.__qualname__}")
                     self._exception = e
@@ -103,7 +104,7 @@ def clingo_logger_exception(tmp_path, stdout):
         with app:
             clingo_main(app, ['test.lp'])
     test.eq("Earlier raised by clingo_logger_exception.<locals>.App.logger", e.exception.__notes__[0])
-    test.eq("(followed by RuntimeError('parsing failed'))", e.exception.__notes__[1])
+    test.eq("(followed by RuntimeError: parsing failed)", e.exception.__notes__[1])
     test.startswith(stdout.getvalue(), "clingo version ")
 
 
