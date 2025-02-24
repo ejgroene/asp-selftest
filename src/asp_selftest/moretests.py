@@ -218,10 +218,10 @@ def clingo_dropin_default_hook_tests(tmp_path, argv, stdout):
     f.write_text("""
     fact(a).
     #program test_fact_1(base).
-    assert(@all("fact")) :- fact(a).
+    assert(@all("fact 1")) :- fact(a).
     assert(@models(1)).
     #program test_fact_2(base).
-    assert(@all("fact")) :- fact(a).
+    assert(@all("fact 2")) :- fact(a).
     assert(@models(1)).
     """)
     argv += [f.as_posix()]

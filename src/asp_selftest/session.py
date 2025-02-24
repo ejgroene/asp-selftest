@@ -1,6 +1,7 @@
 
 import sys
 import importlib
+import contextlib
 
 
 import clingo.ast
@@ -22,7 +23,7 @@ class CompoundContext:
     """
 
     def __init__(self, *contexts):
-        self._contexts = contexts
+        self._contexts = list(contexts)
 
 
     def add_context(self, *context):
@@ -37,9 +38,12 @@ class CompoundContext:
         return getattr(sys.modules['__main__'], name)
 
 
+    @contextlib.contextmanager
     def avec(self, context):
+        self._contexts.append(context)
         """ functional style new CompoundContext with one extra context """
-        return CompoundContext(*self._contexts, context)
+        yield self #CompoundContext(*self._contexts, context)
+        del self._contexts[-1]
 
 
 
@@ -98,7 +102,7 @@ class DefaultHandler:
 
     def logger(this, self, code, message):
         """ if no one cares, we just print """
-        print("Unhandled:", code, message)
+        print("Unhandled:", code, message, file=sys.stderr)
 
 
 

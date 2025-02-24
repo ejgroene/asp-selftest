@@ -30,7 +30,7 @@ def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
 
 
 @test
-def check_for_duplicate_test(raises:(Exception, "Duplicate program name: 'test_a'")):
+def check_for_duplicate_test(raises:(Exception, "Duplicate program name: 'test_a' found in <string>.")):
     next(parse_and_run_tests(""" #program test_a. \n #program test_a. """))
 
 
@@ -210,7 +210,7 @@ def alternative_models_predicate():
     test.eq({'testname': 'base', 'asserts': {'assert(1)'}, 'models': 1}, data)
 
 
-@test
+#@test  this check is about to disappear because of none/cannot
 def warning_about_duplicate_assert():
     t = parse_and_run_tests("""
         #program test_one.
@@ -290,7 +290,7 @@ def assert_with_any():
     test.eq({'testname': 'test_one', 'asserts': {'assert(ab)', 'assert(models(2))'}, 'models': 2}, data)
 
 
-@test
+#@test  this check is about to disappear because of none/cannot
 def duplicate_any_warning(stdout):
     t = parse_and_run_tests("""
         #program test_one.

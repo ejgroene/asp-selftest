@@ -169,7 +169,7 @@ class Tester:
             body = self._rules[a]
             if s in self._asserts and len(body) > 1:
                 self.failures.append(
-                        Warning(f"Duplicate: {s} (disjunction found) in {self._name} in {self._filename}."))
+                        Warning(f"Duplicate: {s} (disjunction found) in {self._name}."))
                 return False
 
         #for ensure in (s for s in model.symbols(atoms=True) if has_name(s, 'ensure')):
@@ -247,7 +247,8 @@ class TesterHook:
                 this.program_nodes.append(node)
                 name, dependencies = program
                 if name in this.programs and name != 'base':
-                    raise Exception(f"Duplicate program name: {name!r}")
+                    existing = next(node for node in this.program_nodes if name in str(node))
+                    raise Exception(f"Duplicate program name: {name!r} found in {node.location.begin.filename}.")
                 this.programs[name] = [(d, []) for d in dependencies]
         this._parts = this.parts()
 
@@ -256,7 +257,8 @@ class TesterHook:
         """ Grounds and solves the *whole* program for *each* #program test_<name> found. """
         for filename, prog_name, dependencies in this._parts:
             if prog_name.startswith('test_'):  # TODO better test
-                parts = (*parameters.get('parts',()), *prog_with_dependencies(this.programs, prog_name, dependencies))
+                parts = (('base', ()), *prog_with_dependencies(this.programs, prog_name, dependencies))
+                #parts = (*parameters.get('parts',()), *prog_with_dependencies(this.programs, prog_name, dependencies))
             elif prog_name == 'base':  # TODO better test
                 parts = (('base', ()),)
             else:
@@ -265,20 +267,21 @@ class TesterHook:
             # We want to use a fresh control, and honor the existing handlers,
             # so we derive our parameters from the existing ones, create a new
             # control and dutyfully call self.[load|ground|solve]().
-            testparms = dict(parameters,
-                             ast=parameters['ast'][:],    # don't let it grow with each test
-                             parts=parts,
-                             context=parameters['context'].avec(tester),
-                             solve_options={'on_model': tester.on_model})
-            # this is a very limited way of supplying the original command line arguments to the control
-            args = [a for a in testparms['arguments'] if a not in testparms['files']]
-            testcontrol = clingo.Control(args, logger=self.logger, message_limit=1)
-            testcontrol.register_observer(tester)
-            self.load(testcontrol, testparms)
-            self.next.ground(testcontrol, testparms)
-            self.solve(testcontrol, testparms)
-            report = tester.report() | {'filename': filename, 'testname': prog_name}
-            this.on_report(report)
+            with parameters['context'].avec(tester) as testcontext:
+                testparms = dict(parameters,
+                                 ast=parameters['ast'][:],    # don't let it grow with each test
+                                 parts=parts,
+                                 context=testcontext,  #parameters['context'].avec(tester),
+                                 solve_options={'on_model': tester.on_model})
+                # this is a very limited way of supplying the original command line arguments to the control
+                args = [a for a in testparms['arguments'] if a not in testparms['files']]
+                testcontrol = clingo.Control(args, logger=self.logger, message_limit=1)
+                #testcontrol.register_observer(tester)
+                self.load(testcontrol, testparms)
+                self.next.ground(testcontrol, testparms)
+                self.solve(testcontrol, testparms)
+                report = tester.report() | {'filename': filename, 'testname': prog_name}
+                this.on_report(report)
         self.next.ground(control, parameters)
 
 

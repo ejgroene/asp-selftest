@@ -44,16 +44,11 @@ def clingo_plus():
     from .application import main_clingo_plus
     main_clingo_plus(clingo_options, programs=plus_options.programs)
     #import cProfile
-    #import pstats
     #with cProfile.Profile() as p:
     #    try:
     #        main_clingo_plus(clingo_options, programs=plus_options.programs)
     #    finally:
-    #        s = pstats.Stats(p, stream=sys.stderr)
-    #        s.dump_stats('profile.prof')
-    #        #s.sort_stats('cumulative')
-    #        s.sort_stats('time')
-    #        s.print_stats(.1)
+    #        p.dump_stats('profile.prof') # use snakeviz to view
 
 
 def asp_reify(): # entry point

@@ -65,6 +65,7 @@ class ReifyHandler:
             ground = False
             for rule in reified_rules(tmpcontrol):
                 if rule not in rules_added:
+                    print(rule, file=open('reified_rules.log', 'a'))
                     clingo.ast.parse_string(rule, ast.append)
                     rules_added.add(rule)
                     ground = True
