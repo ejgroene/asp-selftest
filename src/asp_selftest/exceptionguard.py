@@ -4,6 +4,7 @@ import contextlib
 import inspect
 import traceback
 import sys
+import collections
 
 
 import clingo
@@ -32,9 +33,13 @@ class ExceptionGuard(contextlib.AbstractContextManager):
                 return function(self, *a, **k)
             except Exception as e:
                 if previous_exc := getattr(self, '_exception', False):
-                    note = f"(followed by {type(e).__name__}: {e})"
-                    previous_exc.add_note(note)
+                    if previous_exc.args == e.args:  # TODO test
+                        previous_exc._repeated += 1
+                    else:
+                        note = f"followed by {type(e).__name__}: {e}"
+                        previous_exc.add_note(note)
                 else:
+                    e._repeated = 0
                     e.add_note(f"Earlier raised by {function.__qualname__}")
                     self._exception = e
         return guarding
@@ -56,7 +61,11 @@ class ExceptionGuard(contextlib.AbstractContextManager):
 
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        if hasattr(self, '_exception'):
+        if exception := getattr(self, '_exception', None):
+            notes = collections.Counter(exception.__notes__)   # TODO test
+            exception.__notes__ = [f"{m} (repeated {c} times)" if c > 1 else m for m, c in notes.items()]
+            if exception._repeated > 0:
+                exception.__notes__.insert(0, f"(repeated {exception._repeated} times)")
             if exc_value:
                 self._exception.add_note(f"followed by: {exc_value}")
             raise self._exception
@@ -104,7 +113,7 @@ def clingo_logger_exception(tmp_path, stdout):
         with app:
             clingo_main(app, ['test.lp'])
     test.eq("Earlier raised by clingo_logger_exception.<locals>.App.logger", e.exception.__notes__[0])
-    test.eq("(followed by RuntimeError: parsing failed)", e.exception.__notes__[1])
+    test.eq("followed by RuntimeError: parsing failed", e.exception.__notes__[1])
     test.startswith(stdout.getvalue(), "clingo version ")
 
 

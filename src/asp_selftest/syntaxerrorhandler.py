@@ -22,8 +22,8 @@ class SyntaxErrorHandler:
 
 
     def logger(this, self, code, message):
-        if self.next.logger(code, message):
-            return
+        #if self.next.logger(code, message):  dit was nodig voor ReifyHandler, for filtering, iets anders bedenken
+        #    return
         if code == clingo.MessageCode.FileIncluded:
             # always ignore duplicate includes, only warn. @TODO TESTME
             print("Ignoring duplicate #include:", message, file=sys.stderr)

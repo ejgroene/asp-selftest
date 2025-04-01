@@ -161,9 +161,17 @@ class Tester:
                 self._models_soll = models.symbol.arguments[0].number
         self._models_ist += 1
 
-        for a in itertools.chain(by_signature('none', 1), by_signature('none', 2)):  # TODO test /2
-            if a.is_fact:
-                self.constraints.append(a.symbol)
+        def find_constraints(*names):
+            for name in names:
+                for arity in (1,2):
+                    for symbolic_atom in by_signature(name, arity):
+                        # TODO TEST (although I still don't know how to trigger)
+                        #if symbolic_atom.is_fact: <= this is NOT the same condition as model.is_true
+                        if model.is_true(symbolic_atom.literal):
+                            yield symbolic_atom
+
+        for constraint in find_constraints('none', 'cannot'):
+            self.constraints.append(constraint.symbol)
 
         for a, s in self._symbols.items():
             body = self._rules[a]
