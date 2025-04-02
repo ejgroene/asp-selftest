@@ -292,7 +292,6 @@ class TesterHook:
                 this.on_report(report)
         self.next.ground(control, parameters)
 
-
 from clingo.ast import ASTType
 
 def is_program(a):
@@ -327,3 +326,101 @@ def report_not_for_base_model_count():
     r = t.report()
     test.eq({'asserts': {'assert1'}, 'models': 0}, r)
 
+
+def gather_tests(source):
+    programs = {}
+    stack = []
+
+    def log(code, msg):
+        if code == clingo.MessageCode.FileIncluded:
+            filename = msg.rsplit(maxsplit=1)[-1].strip()
+            stack[-1]['includes'].append(filename)
+
+    def push(filename, add_base=True):
+        ast = []
+        if add_base:
+            # Put program base at the top, as separating the files causes this to get lost.
+            pos = clingo.ast.Position(filename, 0, 0)
+            base = clingo.ast.Program(clingo.ast.Location(pos, pos), 'base', [])
+            ast = [base]
+        p = {'filename': filename, 'includes': [], 'programs': [], 'ast': ast}
+        programs[filename] = p
+        stack.append(p)
+        return p
+
+    pop = stack.pop
+    current_program = None
+
+    def process_node(node):
+        nonlocal current_program
+        filename = node.location.begin.filename
+        print(node, file=sys.stderr)
+        if not stack:
+            p = push(filename, add_base=False)
+        else:
+            p = stack[-1]
+            if filename != p['filename']:
+                if filename in programs:
+                    pop()
+                    p = stack[-1]
+                else:
+                    assert current_program == 'base', f"#include only supported in 'base', not in '{current_program}', in {p['filename']}."
+                    p['includes'].append(filename)
+                    p = push(filename)
+        assert p['filename'] == filename
+        p['ast'].append(node)
+        if program := is_program(node):
+            name, dependencies = program
+            current_program = name
+            if name != 'base':
+                p['programs'].append(program)
+
+    clingo.ast.parse_files(
+            [source],
+            callback=process_node,
+            logger=log)
+
+    return programs
+
+
+@test
+def run_unit_test_separately_on_include(tmp_path):
+    part_a = tmp_path/'part_a.lp'
+    part_b = tmp_path/'part_b.lp'
+    part_c = tmp_path/'part_c.lp'
+    part_a.write_text(f'part(a).  #program test_a.  a.  cannot(fail_a).')
+    part_b.write_text(f'part(b).  #include "{part_a}".  b.  #program test_b.  cannot(fail_b).')
+    part_c.write_text(f'part(c).  #include "{part_b}".  c.  #include "{part_a}".  #program test_c.  cannot(fail_c).')
+    tests = gather_tests(str(part_c))
+    test.eq([str(part_c), str(part_b), str(part_a)], list(tests.keys()))
+    program_a = tests[str(part_a)]
+    program_b = tests[str(part_b)]
+    program_c = tests[str(part_c)]
+    test.eq(3, len(tests))
+
+    test.eq(str(part_a), program_a['filename'])
+    test.eq(str(part_b), program_b['filename'])
+    test.eq(str(part_c), program_c['filename'])
+
+    test.eq([], program_a['includes'])
+    test.eq([str(part_a)], program_b['includes'])
+    test.eq([str(part_b), str(part_a)], program_c['includes'])
+
+    test.eq(['#program base.', 'part(a).', '#program test_a.', 'a.', 'cannot(fail_a).'], [str(a) for a in program_a['ast']])
+    test.eq(['#program base.', 'part(b).', '#program base.', 'b.', '#program test_b.', 'cannot(fail_b).'], [str(a) for a in program_b['ast']])
+    test.eq(['#program base.', 'part(c).', '#program base.', 'c.', '#program test_c.', 'cannot(fail_c).'], [str(a) for a in program_c['ast']])
+
+    test.eq([('test_a', [])], program_a['programs'])
+    test.eq([('test_b', [])], program_b['programs'])
+    test.eq([('test_c', [])], program_c['programs'])
+
+
+@test
+def tail_includes(tmp_path):
+    part_a = tmp_path/'part_a.lp'
+    part_b = tmp_path/'part_b.lp'
+    part_a.write_text(f'part(a).')
+    part_b.write_text(f'#program test_b.  #include "{part_a}".')
+    msg = f"#include only supported in 'base', not in 'test_b', in {part_b}."
+    with test.raises(AssertionError, msg):
+        gather_tests(str(part_b))
