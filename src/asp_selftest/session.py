@@ -79,7 +79,6 @@ class DefaultHandler:
         if source:
             parse, code_source = clingo.ast.parse_string, source
         else:
-            #parse, code_source = clingo.ast.parse_files, parameters['files']
             parse, code_source = clingo.ast.parse_files, files
         l = logger if logger else self.logger
         parse(code_source,

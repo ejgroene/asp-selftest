@@ -42,9 +42,10 @@ def simple_program():
         assert(@all("facts")) :- fact.
         assert(@models(1)).
      """)
-    data = next(t)
-    test.endswith(data.pop('filename'), '<string>')
-    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    # no longer base tests
+    #data = next(t)
+    #test.endswith(data.pop('filename'), '<string>')
+    #test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     data = next(t)
     test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'test_fact', 'asserts': {'assert("facts")', 'assert(models(1))'}, 'models': 1}, data)
@@ -66,9 +67,9 @@ def dependencies():
         assert(@all("one includes base")) :- base_fact, one_fact.
         assert(@models(1)).
      """)
-    data = next(t)
-    test.endswith(data.pop('filename'), '<string>')
-    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    #data = next(t)
+    #test.endswith(data.pop('filename'), '<string>')
+    #test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     data = next(t)
     test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'test_base', 'asserts': {'assert("base_facts")', 'assert(models(1))'}, 'models': 1}, data)
@@ -103,9 +104,9 @@ def warn_for_disjunctions():
         assert(@all(time_exists)) :- time(T).
         assert(@models(1)).
      """)
-    data = next(t)
-    test.endswith(data.pop('filename'), '<string>')
-    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    #data = next(t)
+    #test.endswith(data.pop('filename'), '<string>')
+    #test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     data = next(t)
     test.endswith(data.pop('filename'), '<string>')
     test.eq({'testname': 'test_base', 'asserts': {'assert(models(1))', 'assert(time_exists)'}, 'models': 1}, data)
@@ -185,29 +186,30 @@ def tester_basics():
 
 @test
 def ensure_iso_python_call():
-    t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(42).  ensure(assert("a")).')
+    t = parse_and_run_tests('#program test_a.  a(2).  models(1).  assert("a") :- a(42).  ensure(assert("a")).')
     try:
         next(t)
         test.fail("should raise")  # pragma no cover
     except AssertionError as e:
         test.contains(str(e), 'Failures in ')
-        test.contains(str(e), '#program base():\nassert("a")\n')
-    t = parse_and_run_tests('a(2).  models(1).  assert("a") :- a(2).  ensure(assert("a")).')
+        test.contains(str(e), '#program test_a():\nassert("a")\n')
+    t = parse_and_run_tests('#program test_b.  a(2).  models(1).  assert("a") :- a(2).  ensure(assert("a")).')
     data = next(t)
     test.endswith(data.pop('filename'), '<string>')
-    test.eq({'testname': 'base', 'asserts': {'assert("a")'}, 'models': 1}, data)
+    test.eq({'testname': 'test_b', 'asserts': {'assert("a")'}, 'models': 1}, data)
 
 
 @test
 def alternative_models_predicate():
     t = parse_and_run_tests("""
+        #program test_x.
         assert(1).
         ensure(assert(1)).
         models(1).
      """)
     data = next(t)
     test.endswith(data.pop('filename'), '<string>')
-    test.eq({'testname': 'base', 'asserts': {'assert(1)'}, 'models': 1}, data)
+    test.eq({'testname': 'test_x', 'asserts': {'assert(1)'}, 'models': 1}, data)
 
 
 #@test  this check is about to disappear because of none/cannot
@@ -254,21 +256,12 @@ def NO_warning_about_duplicate_assert_2():
         assert(@all("precondition"))  :-  { precondition(0, 144, voeding) } = 0.
         assert(@models(1)).
      """)
-    data = next(t)
-    data.pop('filename')
-    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    #data = next(t)
+    #data.pop('filename')
+    #test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     data = next(t)
     data.pop('filename')
     test.eq({'testname': 'test_one_1', 'asserts': {'assert("precondition")', 'assert(models(1))'}, 'models': 1}, data)
-    test.eq([], list(t))
-
-
-@test
-def do_not_report_on_base_without_any_asserts():
-    t = parse_and_run_tests("some. stuff.")
-    data = next(t)
-    data.pop('filename')
-    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     test.eq([], list(t))
 
 
@@ -282,9 +275,9 @@ def assert_with_any():
         assert(@all(ab)) :- { a; b } = 1.
         assert(@models(2)).
      """)
-    data = next(t)
-    data.pop('filename')
-    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
+    #data = next(t)
+    #data.pop('filename')
+    #test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
     data = next(t)
     data.pop('filename')
     test.eq({'testname': 'test_one', 'asserts': {'assert(ab)', 'assert(models(2))'}, 'models': 2}, data)

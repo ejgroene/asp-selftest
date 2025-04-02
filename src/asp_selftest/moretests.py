@@ -60,9 +60,9 @@ def repeat(message):
 assert(@all(@repeat("hi"))).
 assert(@models(1)).
 """)
-    data = next(t)
-    data.pop('filename')
-    test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data),
+    #data = next(t)
+    #data.pop('filename')
+    #test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data),
     data = next(t)
     data.pop('filename')
     test.eq({'testname': 'test_me', 'asserts': {'assert(models(1))', 'assert("hi")'}, 'models': 1}, data)
@@ -132,12 +132,12 @@ def maybe_shutup_selftest(argv):
 
 @test
 def main_entry_point_basics(stdin, stdout, argv):
-    stdin.write("a.")
+    stdin.write("a. #program test_a.")
     stdin.seek(0)
     main()
     response = stdout.getvalue()
     test.startswith(response, 'Reading <_io.StringIO')
-    test.endswith(response, 'ASPUNIT: base:  0 asserts,  1 model\n')
+    test.endswith(response, 'ASPUNIT: test_a:  0 asserts,  1 model\n')
 
 
 #@test  # --processor no longer supported
@@ -154,14 +154,14 @@ def main_entry_processing_hook(stdin, stdout, argv):
 @test
 def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
     f = tmp_path/'f.lp'
-    f.write_text('a.\n')
+    f.write_text('a. #program test_ikel.\n')
     argv += [f.as_posix()]
     clingo_plus()
     s = stdout.getvalue().splitlines()
     test.eq('clingo+ version 5.7.1', s[0])
     test.startswith(s[1], 'Reading from')
     test.endswith(s[1], 'f.lp')
-    test.eq('ASPUNIT: base:  0 asserts,  1 model', s[2])
+    test.eq('ASPUNIT: test_ikel:  0 asserts,  1 model', s[2])
     test.eq('Solving...', s[3])
     test.eq('Answer: 1', s[4])
     test.eq('a', s[5])
@@ -208,7 +208,7 @@ def tester_runs_tests(tmp_path, stdout):
     """)
     with MainApp(handlers=[TesterHook()]) as app:
         app.main(Control(), [f.as_posix()])
-    test.eq('ASPUNIT: base:  0 asserts,  1 model\nASPUNIT: test_fact:  2 asserts,  1 model\n',
+    test.eq('ASPUNIT: test_fact:  2 asserts,  1 model\n',
             stdout.getvalue())
 
 
