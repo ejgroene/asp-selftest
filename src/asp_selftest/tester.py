@@ -248,9 +248,15 @@ class TesterHook:
         for node in sorted(this.program_nodes, key=lambda x: x.location.begin.filename):
             yield node.location.begin.filename, node.name, [(p.name, []) for p in node.parameters]
 
-    def parse(this, self, parameters):
-        self.next.parse(parameters)
-        for node in parameters['ast']:
+    def parse(this, self, source=None, files=None, callback=None, control=None, logger=None, message_limit=1):
+        #this.programs_ng = gather_tests(sources)
+        ast = self.next.parse(source=source,
+                              files=files,
+                              callback=callback,
+                              control=control,
+                              logger=logger,
+                              message_limit=message_limit)
+        for node in ast:
             if program := is_program(node):
                 this.program_nodes.append(node)
                 name, dependencies = program
@@ -259,6 +265,7 @@ class TesterHook:
                     raise Exception(f"Duplicate program name: {name!r} found in {node.location.begin.filename}.")
                 this.programs[name] = [(d, []) for d in dependencies]
         this._parts = this.parts()
+        return ast
 
 
     def ground(this, self, control, parameters):
@@ -424,3 +431,8 @@ def tail_includes(tmp_path):
     msg = f"#include only supported in 'base', not in 'test_b', in {part_b}."
     with test.raises(AssertionError, msg):
         gather_tests(str(part_b))
+
+
+@test
+def run_tests():
+    pass

@@ -63,22 +63,31 @@ class DefaultHandler:
             parameters['context'] = CompoundContext()
 
 
-    def parse(this, self, parameters):
+    def parse(this, self, source=None, files=None, callback=None, control=None, logger=None, message_limit=1):
         """ parse code in source or files into an ast, scans for
             processor directives and adds processors on the fly."""
-        parameters['ast'] = []
-        append = parameters['ast'].append
+        ast = []
+        append = ast.append
         def add(node):
             if processor_name := is_processor_predicate(node):
                 handler = self.add_handler_by_name(processor_name, -1, log=True)
                 for method_name in ('prepare', 'parse'):
                     assert not hasattr(handler, method_name), f"{method_name!r} of {processor_name} can never be called."
             append(node)
-        if source := parameters['source']:
+            if callback:
+                callback(node)
+        if source:
             parse, code_source = clingo.ast.parse_string, source
         else:
-            parse, code_source = clingo.ast.parse_files, parameters['files']
-        parse(code_source, callback=add, logger=self.logger, message_limit=1)
+            #parse, code_source = clingo.ast.parse_files, parameters['files']
+            parse, code_source = clingo.ast.parse_files, files
+        l = logger if logger else self.logger
+        parse(code_source,
+              callback=add,
+              control=control,
+              logger=l,
+              message_limit=message_limit)
+        return ast
 
 
     def load(this, self, control, parameters):
@@ -134,8 +143,15 @@ class AspSession(Delegate):
 
 
     def go_prepare(self):
-        self.prepare(self.parameters)
-        self.parse(self.parameters)
+        p = self.parameters
+        self.prepare(p)
+        ast = self.parse(source=p['source'],
+                         files=p['files'],
+                         callback=None,
+                         control=None,
+                         logger=None,
+                         message_limit=20)
+        self.parameters['ast'] = ast
 
 
     def go_ground(self, control=None, parts=None):
