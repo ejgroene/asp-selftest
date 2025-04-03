@@ -30,17 +30,6 @@ def print_test_result(result):
     print(f" {len(asserts)} asserts,  {models} model{'s' if models>1 else ''}")
 
 
-def prog_with_dependencies(programs, name, dependencies):
-    yield name, [clingo.Number(42) for _ in dependencies]
-    for dep, args in dependencies:
-        assert dep in programs, f"Dependency {dep} of {name} not found."
-        formal_args = programs.get(dep, [])
-        formal_names = list(a[0] for a in formal_args)
-        if len(args) != len(formal_names):
-            raise Exception(f"Argument mismatch in {name!r} for dependency {dep!r}. Required: {formal_names}, given: {args}.")
-        yield dep, [clingo.Number(a) for a in args]
-
-
 CR = '\n' # trick to support old python versions that do not accecpt \ in f-strings
 def batched(iterable, n):
     """ not in python < 3.12 """
@@ -131,9 +120,6 @@ class Tester:
     def all(self, *args):
         """ ASP API: add a named assert to be checked for each model """
         args, assrt = create_assert(*args)
-        #if rule := self._asserts.get(assrt):
-        #    if rule != self._current_rule:
-        #        print(f"WARNING: duplicate assert: {assrt}, {self._current_rule}")
         self.add_assert(assrt)
         return args
 
@@ -248,6 +234,7 @@ class TesterHook:
         for node in sorted(this.program_nodes, key=lambda x: x.location.begin.filename):
             yield node.location.begin.filename, node.name, [(p.name, []) for p in node.parameters]
 
+
     def parse(this, self, source=None, files=None, callback=None, control=None, logger=None, message_limit=1):
 
         ast, this.programs_ng = gather_tests(
@@ -259,44 +246,29 @@ class TesterHook:
                 logger=self.logger,
                 message_limit=message_limit)
 
-        #for node in ast:
-        #    if program := is_program(node):
-        #        this.program_nodes.append(node)
-        #        name, dependencies = program
-        #        if name in this.programs and name != 'base':
-        #            existing = next(node for node in this.program_nodes if name in str(node))
-        #            raise Exception(f"Duplicate program name: {name!r} found in {node.location.begin.filename}.")
-        #        this.programs[name] = [(d, []) for d in dependencies]
-        #this._parts = this.parts()
         return ast
 
 
     def ground(this, self, control, parameters):
         """ Grounds and solves the *whole* program for *each* #program test_<name> found. """
-        for filename, program_data in this.programs_ng.items():
-            for prog_name, dependencies in program_data['programs'].items():
+        for filename, programs in this.programs_ng.items():
+            for prog_name, dependencies in programs.items():
                 if prog_name.startswith('test_'):
-                    parts = [(prog_name, [clingo.Number(42) for _ in dependencies])]
+                    parts = [('base', []), (prog_name, [clingo.Number(42) for _ in dependencies])]
                     for dep in dependencies:
-                        depdeps = program_data['programs'][dep]
+                        if dep == 'base':
+                            continue
+                        depdeps = programs[dep]
                         if len(depdeps) > 0: # args to dependencies are not Clingo syntax compatible
                             raise Exception(f"Argument mismatch in {prog_name!r} for dependency {dep!r}. Required: {depdeps}, given: [].")
-                        parts.append((dep, [clingo.Number(42) for _ in depdeps]))
+                        parts.append((dep, []))
                 else:
                     continue
 
-        #for filename, prog_name, dependencies in this._parts:
-        #    if prog_name.startswith('test_'):  # TODO better test
-        #        parts = (('base', ()), *prog_with_dependencies(this.programs, prog_name, dependencies))
-        #        #parts = (*parameters.get('parts',()), *prog_with_dependencies(this.programs, prog_name, dependencies))
-        #    elif prog_name == 'base':  # TODO better test
-        #        parts = (('base', ()),)
-        #    else:
-        #        continue
                 tester = Tester(filename, prog_name)
-            # We want to use a fresh control, and honor the existing handlers,
-            # so we derive our parameters from the existing ones, create a new
-            # control and dutyfully call self.[load|ground|solve]().
+                # We want to use a fresh control, and honor the existing handlers,
+                # so we derive our parameters from the existing ones, create a new
+                # control and dutyfully call self.[load|ground|solve]().
                 with parameters['context'].avec(tester) as testcontext:
                     testparms = dict(parameters,
                                      ast=parameters['ast'][:],    # don't let it grow with each test
@@ -319,6 +291,9 @@ from clingo.ast import ASTType
 def is_program(a):
     if a.ast_type == ASTType.Program:
         return a.name, [p.name for p in a.parameters]
+
+def is_generated_base(a):
+    return a.ast_type == ASTType.Program and a.name == 'base' and a.location.begin.column == a.location.end.column == 1
 
 
 import clingo
@@ -352,61 +327,28 @@ def report_not_for_base_model_count():
 def gather_tests(parse, source=None, files=None, callback=None,
                  control=None, logger=None, message_limit=20):
     programs = {}
-    stack = []
     global_ast = []
 
-    def log(code, msg):
-        if code == clingo.MessageCode.FileIncluded:
-            filename = msg.rsplit(maxsplit=1)[-1].strip()
-            stack[-1]['includes'].append(filename)
-        if logger:
-            logger(code, msg)
-
-    def push(filename, add_base=True):
-        ast = []
-        if add_base:
-            # Put program base at the top, as separating the files causes this to get lost.
-            pos = clingo.ast.Position(filename, 0, 0)
-            base = clingo.ast.Program(clingo.ast.Location(pos, pos), 'base', [])
-            ast = [base]
-        p = {'filename': filename, 'includes': [], 'programs': {'base': []}, 'ast': ast}
-        programs[filename] = p
-        stack.append(p)
-        return p
-
-    pop = stack.pop
-    current_program = None
-
     def process_node(node):
+        if callback:
+            callback(node)
         global_ast.append(node)
-        nonlocal current_program
         filename = node.location.begin.filename
-        if not stack:
-            p = push(filename, add_base=False)
-        else:
-            p = stack[-1]
-            if filename != p['filename']:
-                if filename in programs:
-                    pop()
-                    p = stack[-1]
-                else:
-                    assert current_program == 'base', f"#include only supported in 'base', not in '{current_program}', in {p['filename']}."
-                    p['includes'].append(filename)
-                    p = push(filename)
-        assert p['filename'] == filename
-        p['ast'].append(node)
+        if filename not in programs:
+            programs[filename] = {}
         if program := is_program(node):
             name, dependencies = program
             current_program = name
-            if name != 'base' and name in p['programs']:
-                raise Exception(f"Duplicate program name: {name!r} found in {node.location.begin.filename}.")
-            p['programs'][name] = dependencies
+            if name != 'base':
+                if name in programs[filename]:
+                    raise Exception(f"Duplicate program name: {name!r} found in {node.location.begin.filename}.")
+                programs[filename][name] = dependencies
 
     parse(source=source,
           files=files,
           callback=process_node,
           control=control,
-          logger=log,
+          logger=logger,
           message_limit=message_limit)
 
     return global_ast, programs
@@ -422,43 +364,63 @@ def run_unit_test_separately_on_include(tmp_path):
     part_c.write_text(f'part(c).  #include "{part_b}".  c.  #include "{part_a}".  #program test_c.  cannot(fail_c).')
     def parse(source=None, **kw):
         clingo.ast.parse_files(**kw)
-    _, tests = gather_tests(parse, files=[str(part_c)])
-    test.eq([str(part_c), str(part_b), str(part_a)], list(tests.keys()))
-    program_a = tests[str(part_a)]
-    program_b = tests[str(part_b)]
-    program_c = tests[str(part_c)]
-    test.eq(3, len(tests))
+    ast, programs = gather_tests(parse, files=[str(part_c)])
+    programs_a = programs[str(part_a)]
+    programs_b = programs[str(part_b)]
+    programs_c = programs[str(part_c)]
+    test.eq(3, len(programs))
 
-    test.eq(str(part_a), program_a['filename'])
-    test.eq(str(part_b), program_b['filename'])
-    test.eq(str(part_c), program_c['filename'])
+    test.eq({'test_a': []}, programs_a)
+    test.eq({'test_b': []}, programs_b)
+    test.eq({'test_c': []}, programs_c)
 
-    test.eq([], program_a['includes'])
-    test.eq([str(part_a)], program_b['includes'])
-    test.eq([str(part_b), str(part_a)], program_c['includes'])
+    test.eq([
+        '#program base.',
+        'part(c).',
+        'part(b).',
+        'part(a).',
+        '#program test_a.',
+        'a.',
+        'cannot(fail_a).',
+        '#program base.',
+        'b.',
+        '#program test_b.',
+        'cannot(fail_b).',
+        '#program base.',
+        'c.',
+        '#program test_c.',
+        'cannot(fail_c).'
+        ], [str(a) for a in ast])
 
-    test.eq(['#program base.', 'part(a).', '#program test_a.', 'a.', 'cannot(fail_a).'], [str(a) for a in program_a['ast']])
-    test.eq(['#program base.', 'part(b).', '#program base.', 'b.', '#program test_b.', 'cannot(fail_b).'], [str(a) for a in program_b['ast']])
-    test.eq(['#program base.', 'part(c).', '#program base.', 'c.', '#program test_c.', 'cannot(fail_c).'], [str(a) for a in program_c['ast']])
 
-    test.eq({'base': [], 'test_a': []}, program_a['programs'])
-    test.eq({'base': [], 'test_b': []}, program_b['programs'])
-    test.eq({'base': [], 'test_c': []}, program_c['programs'])
-
-
-@test
-def tail_includes(tmp_path):
-    part_a = tmp_path/'part_a.lp'
-    part_b = tmp_path/'part_b.lp'
-    part_a.write_text(f'part(a).')
-    part_b.write_text(f'#program test_b.  #include "{part_a}".')
-    msg = f"#include only supported in 'base', not in 'test_b', in {part_b}."
+def do_parse(source):
+    ast = []
     def parse(source=None, **kw):
         clingo.ast.parse_files(**kw)
-    with test.raises(AssertionError, msg):
-        gather_tests(parse, files=[str(part_b)])
+    def callback(node):
+        ast.append(node)
+    data = gather_tests(parse, files=[str(source)], callback=callback)
+    return ast, data
 
 
 @test
-def run_tests():
-    pass
+def file_with_only_include(tmp_path):
+    part_a = tmp_path/'part_a.lp'
+    part_b = tmp_path/'part_b.lp'
+    part_c = tmp_path/'part_c.lp'
+    part_a.write_text(f'part(a).')
+    part_b.write_text(f'#include "{part_a}".')
+    part_c.write_text(f'#include "{part_b}".')
+    ast, _ = do_parse(part_c)
+    test.eq(['#program base.', 'part(a).', '#program base.', '#program base.'], [str(a) for a in ast])
+
+@test
+def file_with_include_in_program(tmp_path):
+    part_a = tmp_path/'part_a.lp'
+    part_b = tmp_path/'part_b.lp'
+    part_c = tmp_path/'part_c.lp'
+    part_a.write_text(f'part(a).')
+    part_b.write_text(f'#include "{part_a}".')
+    part_c.write_text(f'#program aap.  #include "{part_b}".')
+    ast, _ = do_parse(part_c)
+    test.eq(['#program base.', '#program aap.', 'part(a).', '#program base.', '#program base.'], [str(a) for a in ast])
