@@ -225,34 +225,57 @@ class Tester:
 class TesterHook:
 
     def __init__(this, on_report=print_test_result):
-        this.programs = {}
-        this.program_nodes = []
         this.on_report = on_report
 
-    def parts(this):
-        # TODO test sorting
-        for node in sorted(this.program_nodes, key=lambda x: x.location.begin.filename):
-            yield node.location.begin.filename, node.name, [(p.name, []) for p in node.parameters]
+    def parse(this, self, **kwargs):
+        ast, files = this._parse(self, **kwargs)
+        this.files = files
+        return ast
 
+    def _parse(this, self, source=None, files=None, callback=None, control=None, logger=None, message_limit=1):
 
-    def parse(this, self, source=None, files=None, callback=None, control=None, logger=None, message_limit=1):
+        logger = logger if logger else self.logger
 
-        ast, this.programs_ng = gather_tests(
+        def suppress_include(code, message):
+            if code != clingo.MessageCode.FileIncluded and logger:
+                logger(code, message)
+
+        this.main_ast, this.files = gather_tests(
                 parse=self.next.parse,
                 source=source,
                 files=files,
                 callback=callback,
                 control=control,
-                logger=self.logger,
+                logger=suppress_include,
                 message_limit=message_limit)
 
-        return ast
+        return this.main_ast, this.files
 
 
     def ground(this, self, control, parameters):
-        """ Grounds and solves the *whole* program for *each* #program test_<name> found. """
-        for filename, programs in this.programs_ng.items():
-            for prog_name, dependencies in programs.items():
+        """ Grounds and solves the tests in each included file separately. """
+        for filename, programs in this.files.items():
+
+            tests = {p:deps for p,deps in programs.items() if p.startswith('test_')}
+            if tests:
+                print("\n\n============", filename, len(tests), "tests.", file=sys.stderr)
+                seen = set()
+                def cb(node):
+                    fn = node.location.begin.filename
+                    if fn in seen:
+                        return
+                    seen.add(fn)
+                    print(fn, file=sys.stderr)
+
+                if filename == '<string>':
+                    fileast, files = this.main_ast, this.files
+                else:
+                    fileast, files = this._parse(
+                            self,
+                            files=[filename],
+                            callback=cb)
+
+            for prog_name, dependencies in tests.items():
                 if prog_name.startswith('test_'):
                     parts = [('base', []), (prog_name, [clingo.Number(42) for _ in dependencies])]
                     for dep in dependencies:
@@ -271,7 +294,8 @@ class TesterHook:
                 # control and dutyfully call self.[load|ground|solve]().
                 with parameters['context'].avec(tester) as testcontext:
                     testparms = dict(parameters,
-                                     ast=parameters['ast'][:],    # don't let it grow with each test
+                                     ###ast=parameters['ast'][:],    # don't let it grow with each test
+                                     ast=fileast,
                                      parts=parts,
                                      context=testcontext,  #parameters['context'].avec(tester),
                                      solve_options={'on_model': tester.on_model})
@@ -294,7 +318,6 @@ def is_program(a):
 
 def is_generated_base(a):
     return a.ast_type == ASTType.Program and a.name == 'base' and a.location.begin.column == a.location.end.column == 1
-
 
 import clingo
 @test

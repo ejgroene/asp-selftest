@@ -148,7 +148,7 @@ class AspSession(Delegate):
                          files=p['files'],
                          callback=None,
                          control=None,
-                         logger=None,
+                         logger=self.logger,
                          message_limit=20)
         self.parameters['ast'] = ast
 
