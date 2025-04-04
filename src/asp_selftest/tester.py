@@ -241,7 +241,7 @@ class TesterHook:
             if code != clingo.MessageCode.FileIncluded and logger:
                 logger(code, message)
 
-        this.main_ast, this.files = gather_tests(
+        ast, files = gather_tests(
                 parse=self.next.parse,
                 source=source,
                 files=files,
@@ -250,7 +250,9 @@ class TesterHook:
                 logger=suppress_include,
                 message_limit=message_limit)
 
-        return this.main_ast, this.files
+        piggies.update(ast=ast, files=files)
+
+        return ast, files
 
 
     def ground(this, self, control, parameters, piggies=None):
@@ -260,34 +262,21 @@ class TesterHook:
             tests = {p:deps for p,deps in programs.items() if p.startswith('test_')}
             if tests:
                 print("\n\n============", filename, len(tests), "tests.", file=sys.stderr)
-                seen = set()
-                def cb(node):
-                    fn = node.location.begin.filename
-                    if fn in seen:
-                        return
-                    seen.add(fn)
-                    print(fn, file=sys.stderr)
 
                 if filename == '<string>':
-                    fileast, files = this.main_ast, this.files
+                    fileast, files = piggies['ast'], piggies['files']
                 else:
                     fileast, files = this._parse(
                             self,
                             files=[filename],
-                            callback=cb)
+                            piggies=piggies)
+
+                for includedfilename in files:
+                    print("  ", includedfilename, file=sys.stderr)
 
             for prog_name, dependencies in tests.items():
-                if prog_name.startswith('test_'):
-                    parts = [('base', []), (prog_name, [clingo.Number(42) for _ in dependencies])]
-                    for dep in dependencies:
-                        if dep == 'base':
-                            continue
-                        depdeps = programs[dep]
-                        if len(depdeps) > 0: # args to dependencies are not Clingo syntax compatible
-                            raise Exception(f"Argument mismatch in {prog_name!r} for dependency {dep!r}. Required: {depdeps}, given: [].")
-                        parts.append((dep, []))
-                else:
-                    continue
+                parts = [(prog_name, [clingo.Number(42) for _ in dependencies])] + \
+                        [(dep_name, []) for dep_name in dependencies]
 
                 tester = Tester(filename, prog_name)
                 # We want to use a fresh control, and honor the existing handlers,
@@ -363,9 +352,9 @@ def gather_tests(parse, source=None, files=None, callback=None,
         if program := is_program(node):
             name, dependencies = program
             current_program = name
-            if name != 'base':
+            if name.startswith('test_'):
                 if name in programs[filename]:
-                    raise Exception(f"Duplicate program name: {name!r} found in {node.location.begin.filename}.")
+                    raise Exception(f"Duplicate test: {name!r} found in {filename}.")
                 programs[filename][name] = dependencies
 
     parse(source=source,

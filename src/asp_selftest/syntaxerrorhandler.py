@@ -62,8 +62,9 @@ def ground_exc(source=None, label='test', files=(), parts=None, observer=None,  
         session = AspSession(source=source, label=label, files=files,
                              context=context, handlers=(*handlers, handler, SyntaxErrorHandler()),
                              arguments=arguments)
-        session.go_prepare()
-        return session.go_ground(parts=parts)
+        piggies = {}
+        session.go_prepare(piggies=piggies)
+        return session.go_ground(parts=parts, piggies=piggies)
        
 
 
