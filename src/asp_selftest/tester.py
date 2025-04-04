@@ -232,7 +232,8 @@ class TesterHook:
         this.files = files
         return ast
 
-    def _parse(this, self, source=None, files=None, callback=None, control=None, logger=None, message_limit=1):
+    def _parse(this, self, source=None, files=None, callback=None,
+               control=None, logger=None, message_limit=1, piggies=None):
 
         logger = logger if logger else self.logger
 
@@ -252,7 +253,7 @@ class TesterHook:
         return this.main_ast, this.files
 
 
-    def ground(this, self, control, parameters):
+    def ground(this, self, control, parameters, piggies=None):
         """ Grounds and solves the tests in each included file separately. """
         for filename, programs in this.files.items():
 

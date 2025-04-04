@@ -56,14 +56,15 @@ class DefaultHandler:
         return clingo.Control(logger=self.logger, message_limit=1)
 
 
-    def prepare(this, self, parameters):
+    def prepare(this, self, parameters, piggies=None):
         if context := parameters['context']:
             parameters['context'] = CompoundContext(context)
         else:
             parameters['context'] = CompoundContext()
 
 
-    def parse(this, self, source=None, files=None, callback=None, control=None, logger=None, message_limit=1):
+    def parse(this, self, source=None, files=None, callback=None, control=None,
+              logger=None, message_limit=1, piggies=None):
         """ parse code in source or files into an ast, scans for
             processor directives and adds processors on the fly."""
         ast = []
@@ -89,7 +90,7 @@ class DefaultHandler:
         return ast
 
 
-    def load(this, self, control, parameters):
+    def load(this, self, control, parameters, piggies=None):
         """ loads the AST into the given control """
         with clingo.ast.ProgramBuilder(control) as builder:
             add = builder.add
@@ -97,13 +98,13 @@ class DefaultHandler:
                 add(node)
 
 
-    def ground(this, self, control, parameters):
+    def ground(this, self, control, parameters, piggies=None):
         """ ground the given parts, using context """
         parameters.setdefault('parts', [('base', ()),])
         control.ground(parameters['parts'], context=parameters['context'])
 
 
-    def solve(this, self, control, parameters):
+    def solve(this, self, control, parameters, piggies=None):
         """ solves and return an iterator with models, if any """
         return control.solve(**parameters['solve_options'])
 
@@ -135,25 +136,27 @@ class AspSession(Delegate):
 
     def __call__(self, control=None, parts=None, **solve_options):
         """ combine ground and solve for convenience """
-        self.go_prepare()
-        control = self.go_ground(control=control, parts=parts)
-        r = self.go_solve(control, **solve_options)
+        piggies = {}
+        self.go_prepare(piggies=piggies)
+        control = self.go_ground(control=control, parts=parts, piggies=piggies)
+        r = self.go_solve(control, piggies=piggies, **solve_options)
         return r
 
 
-    def go_prepare(self):
+    def go_prepare(self, piggies=None):
         p = self.parameters
-        self.prepare(p)
+        self.prepare(p, piggies=piggies)
         ast = self.parse(source=p['source'],
                          files=p['files'],
                          callback=None,
                          control=None,
                          logger=self.logger,
-                         message_limit=20)
+                         message_limit=20,
+                         piggies=piggies)
         self.parameters['ast'] = ast
 
 
-    def go_ground(self, control=None, parts=None):
+    def go_ground(self, control=None, parts=None, piggies=None):
         """ ground parts into given control; control must be fresh """
         parameters = self.parameters
         if not control:
@@ -164,15 +167,15 @@ class AspSession(Delegate):
             self._spent_controls.add(control)
         if parts is not None:
             parameters['parts'] = parts
-        self.load(control, parameters)
-        self.ground(control, parameters)
+        self.load(control, parameters, piggies=piggies)
+        self.ground(control, parameters, piggies=piggies)
         return control
 
 
-    def go_solve(self, control, **solve_options):
+    def go_solve(self, control, piggies=None, **solve_options):
         parameters = self.parameters
         parameters['solve_options'] = solve_options
-        r = self.solve(control, parameters)
+        r = self.solve(control, parameters, piggies=piggies)
         return r
 
 
@@ -264,7 +267,7 @@ def hook_basics():
 
 # for testing hooks
 class TestHaak:
-    def ground(this, self, control, parameters):
+    def ground(this, self, control, parameters, piggies=None):
         control.add('testhook(ground).')
         self.next.ground(control, parameters)
 
@@ -285,7 +288,7 @@ def add_hook_in_ASP(stderr):
 class TestHook2:
     def main(this, self, parameters):
         pass  # pragma no cover
-    def parse(this, self, parameters):
+    def parse(this, self, parameters, piggies=None):
         pass  # pragma no cover
 
 
@@ -302,13 +305,13 @@ def hook_in_ASP_is_too_late_for_some_methods(stdout):
 def multiple_hooks():
     session = AspSession('boe.')
     class Hook1():
-        def ground(this, self, control, parameters):
+        def ground(this, self, control, parameters, piggies=None):
             control.add('hook_1.')
-            self.next.ground(control, parameters)
+            self.next.ground(control, parameters, piggies=piggies)
     class Hook2():
-        def ground(this, self, control, parameters):
+        def ground(this, self, control, parameters, piggies=None):
             control.add('hook_2.')
-            self.next.ground(control, parameters)
+            self.next.ground(control, parameters, piggies=piggies)
     h1 = Hook1()
     h2 = Hook2()
     session.add_delegatee(h1)
@@ -348,9 +351,9 @@ def select_parts():
 
 
 class ThreeContextsHandler:
-    def ground(this, self, control, parameters):
+    def ground(this, self, control, parameters, piggies=None):
         parameters['context'].add_context(this)
-        self.next.ground(control, parameters)
+        self.next.ground(control, parameters, piggies=piggies)
     def b(this):
         return  clingo.Number(19)
 

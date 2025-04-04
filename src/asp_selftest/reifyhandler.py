@@ -48,7 +48,7 @@ def asp_reify(code):
 
 class ReifyHandler:
 
-    def load(this, self, control, parameters):
+    def load(this, self, control, parameters, piggies=None):
         parts = parameters.get('parts', None)
         if not parts:
             parts = [('base', ())] # + [(p, ()) for p in self.programs or []]
