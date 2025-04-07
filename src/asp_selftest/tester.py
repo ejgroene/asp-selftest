@@ -261,7 +261,7 @@ class TesterHook:
 
             tests = {p:deps for p,deps in programs.items() if p.startswith('test_')}
             if tests:
-                print("\n\n============", filename, len(tests), "tests.", file=sys.stderr)
+                print(F"ASP FILE: {filename}, tests: {len(tests)}.", file=sys.stderr)
 
                 if filename == '<string>':
                     fileast, files = piggies['ast'], piggies['files']
@@ -272,7 +272,8 @@ class TesterHook:
                             piggies=piggies)
 
                 for includedfilename in files:
-                    print("  ", includedfilename, file=sys.stderr)
+                    if includedfilename != filename:
+                        print("  includes:", includedfilename, file=sys.stderr)
 
             for prog_name, dependencies in tests.items():
                 parts = [(prog_name, [clingo.Number(42) for _ in dependencies])] + \
