@@ -26,7 +26,8 @@ class SyntaxErrorHandler:
         #    return
         if code == clingo.MessageCode.FileIncluded:
             # always ignore duplicate includes, only warn. @TODO TESTME
-            print("Ignoring duplicate #include:", message, file=sys.stderr)
+            #print("Ignoring duplicate #include:", message, file=sys.stderr)
+            pass
         elif this._suppress == code:
             this._suppress = None
         else:
