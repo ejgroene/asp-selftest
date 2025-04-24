@@ -48,24 +48,21 @@ def reify_print_path(stdout, argv):
 
 
 @test
-def register_python_function():
+def use_own_python_function():
     t = parse_and_run_tests("""
 #script (python)
-def repeat(message):
+def echo(message):
     return message
-#register(repeat)
 #end.
 
 #program test_me(base).
-assert(@all(@repeat("hi"))).
-assert(@models(1)).
+hello(@echo("hi")).
+models(1).
 """)
-    #data = next(t)
-    #data.pop('filename')
-    #test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data),
     data = next(t)
     data.pop('filename')
-    test.eq({'testname': 'test_me', 'asserts': {'assert(models(1))', 'assert("hi")'}, 'models': 1}, data)
+    test.eq({'testname': 'test_me', 'models': 1}, data)
+    # implicitly tested by the fact that it does not raise exception on @echo()
     test.eq([], list(t))
 
 
@@ -137,7 +134,7 @@ def main_entry_point_basics(stdin, stdout, argv):
     main()
     response = stdout.getvalue()
     test.startswith(response, 'Reading <_io.StringIO')
-    test.endswith(response, 'ASPUNIT: test_a:  0 asserts,  1 model\n')
+    test.endswith(response, 'ASPUNIT: test_a:  1 model\n')
 
 
 #@test  # --processor no longer supported
@@ -161,7 +158,7 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
     test.eq('clingo+ version 5.7.1', s[0])
     test.startswith(s[1], 'Reading from')
     test.endswith(s[1], 'f.lp')
-    test.eq('ASPUNIT: test_ikel:  0 asserts,  1 model', s[2])
+    test.eq('ASPUNIT: test_ikel:  1 model', s[2])
     test.eq('Solving...', s[3])
     test.eq('Answer: 1', s[4])
     test.eq('a', s[5])
@@ -203,12 +200,12 @@ def tester_runs_tests(tmp_path, stdout):
     f.write_text("""
     fact(a).
     #program test_fact(base).
-    assert(@all("fact")) :- fact(a).
-    assert(@models(1)).
+    cannot("fact") :- not fact(a).
+    models(1).
     """)
     with MainApp(handlers=[TesterHook()]) as app:
         app.main(Control(), [f.as_posix()])
-    test.eq('ASPUNIT: test_fact:  2 asserts,  1 model\n',
+    test.eq('ASPUNIT: test_fact:  1 model\n',
             stdout.getvalue())
 
 
@@ -218,17 +215,17 @@ def clingo_dropin_default_hook_tests(tmp_path, argv, stdout):
     f.write_text("""
     fact(a).
     #program test_fact_1(base).
-    assert(@all("fact 1")) :- fact(a).
-    assert(@models(1)).
+    cannot("fact 1") :- not fact(a).
+    models(1).
     #program test_fact_2(base).
-    assert(@all("fact 2")) :- fact(a).
-    assert(@models(1)).
+    cannot("fact 2") :- not fact(a).
+    models(1).
     """)
     argv += [f.as_posix()]
     clingo_plus()
     s = stdout.getvalue()
-    test.contains(s, 'ASPUNIT: test_fact_1:  2 asserts,  1 model\n')
-    test.contains(s, 'ASPUNIT: test_fact_2:  2 asserts,  1 model\n')
+    test.contains(s, 'ASPUNIT: test_fact_1:  1 model\n')
+    test.contains(s, 'ASPUNIT: test_fact_2:  1 model\n')
 
 
 @test
@@ -253,13 +250,13 @@ def my_func(a):
     return a
 #end.
 #program test_one.
-assert(@all(@my_func("hello"))).
-assert(@models(1)).
+something(@my_func("hello")).
+models(1).
     """)
     argv += [f.as_posix()]
     clingo_plus()
     s = stdout.getvalue()
-    test.contains(s, "ASPUNIT: test_one:  2 asserts,  1 model")
+    test.contains(s, "ASPUNIT: test_one:  1 model")
     #test.contains(s, 'assert(models(1)) assert("hello")')
 
 
