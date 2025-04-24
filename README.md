@@ -1,99 +1,115 @@
-asp-selftest
-============
-In-source test runner for Answer Set Programming (ASP) with Clingo.
+# asp-selftest
 
-Status
-------
+**In-source** test runner for _Answer Set Programming_ (`ASP`) with [Clingo](https://potassco.org).
 
-This tools is still a work in progress.
+It allows one to write **constraints** in ASP that will automatically be checked on loading. Consider `logic.lp` which contains:
 
-This Test-Tool has been presented at (Declarative Amsterdam in November 2024)[https://declarative.amsterdam/program-2024]. All the materials, including the presentation, are online and can be found via the given link.
+    node(A)  :-  edge(A, _).
+    node(B)  :-  edge(_, B).
+    
+    cannot("at least one edge")  :-  not { edge(_, _) } > 0.
+    
+    #program test_edge_leads_to_nodes(base).
+    edge(x, y).
+    cannot("node x")  :-  not node(x).
+    cannot("node y")  :-  not node(y).
+    cannot("node z")  :-  not node(z).  % fails
 
-It is currently in transition from `asp-test` towards `clingo-tests`. The latter is a drop-in replacement for `clingo` with the added ability to activate `plugins`. The former is still around.
+Using `cannot` we capture the results from constraints that _cannot be true_. This leads to the following output:
 
-A plugin for running the in-source unit tests is active by default. A plugin translating clingo (syntax) errors to Python exceptions with ASP source snippets with exact error location is also active.
+    AssertionError: MODEL:
+    edge(x,y)  node(x)    node(y)
+    Failures in logic.lp, #program test_edge_leads_to_nodes():
+    cannot("node z")
 
-You can write you own plugins. I have one for reifying rules from theory atoms, for example.
+If we make a mistake, it tells us in a sensible way:
 
-About
------
-
-With in-source testing, source and tests stay together in the same file, hence the tests are also expressed in ASP.
-
-The tests are as non-obstrusive as possible and and many examples are idiomatic in nature and could have been written in another way. These idioms are merely ways to provide clearer code and avoid mistakes. As such, they have value in themselves.
-
-
-RUNNING
--------
-
-After installation via pip, run it using:
-
-    $ asp-tests <file.lp> ...
-
-Alternatively you can run it as a module, given that either the working directory of the PYTHONPATH are set to 'src':
-
-    $ python -m asp_selftest <file.lp> ...
-
-There are options to silents the in-source Python tests etc, have a look:
-
-    $ asp-tests -h
+    ...
+    File "asp-selftest/src/asp_selftest/syntaxerrorhandler.py", line 37, in logger
+      raise warn2raise(source, label, code, message)
+    File "logic.lp", line 2
+       1 node(A)  :-  edge(A, _).
+       2 node(B)  :-  edge(_, A).
+              ^ 'B' is unsafe
+         ^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  node(B):-[#inc_base];edge(#Anon0,A).
+       3
+       4 cannot("at least one edge")  :-  not { edge(_, _) } > 0.
 
 
-TESTING
--------
-The code is equiped with in-source Python tests which always run. You can silence them with --silent.
+## Status
+
+This tools is still a **work in progress**. I use it for a project to providing **formal specifications** for **railway interlocking**. It consist of 35 files, 100+ tests and 600+ `cannot`s.
 
 
-TODO
-----
-To use the program without the tests: Not Yet Implemented. But you can use the `base` program anywhere of course, since all `#program`s are ignored by default.
+`asp-selftest` has been presented at [Declarative Amsterdam in November 2024](https://declarative.amsterdam/program-2024).
 
 
-IDEA
-----
+## Changes
 
-1. Use `#program`'s to identify units and their dependencies. Here we have a unit called `unitA` with a unit test for it called `testunitA`.
+From version `v0.0.30` upwards, `@all`, `@any`, `@model` and the special treatment of predicate `assert` are **removed**.
+From this version on, only `cannot` is supported.
+
+Tests from `#include` files are run in their own context, making it easier to add `cannot` to `base`-parts.
+
+It is tenfold **faster**. It runs all my 100+ tests in less than 2 seconds.
+
+Also, `asp-test` is removed. Only `clingo+` remains. The latter is a drop-in replacement for `clingo` with the added ability to activate `plugins`, of which these are default:
+
+ 1. `TesterHook` - runs in-source unit tests.
+ 2. `SyntaxErrorHandler` - provides nice in-source error messages, a la Python
+
+You can write you own plugins. I have one for `reifying` rules from theory atoms, for example.
+
+## Why In-Source?
+
+With `in-source` testing, source and tests stay together in the same file. This enables automatic collection and running and avoid maintaining a test tree, and it eases refactoring greatly.
+
+# Installing and running
+
+## Installing
+
+    pip install asp-selftest
+
+Run it using:
+
+    $ clingo+ <file.lp> ...
+
+There is one additional option to silence the in-source Python tests:
+
+    $ clingo+ --silent
+
+
+# A bit of documentation
+
+1. Use `#program`'s to specify tests and their dependencies. Here we have a unit called `unit_A` with a unit test for it called `test_unit_A`. Test must start with `test_`. Formal arguments are treated as dependencies.
 
        #program unit_A.
     
-       #program test_unit_A(unit_A).
+       #program test_unit_A(base, unit_A).
 
-   The implicit program `base` (see Clingo Guide) must be referenced explicitly if needed.
+    The implicit program `base` (see Clingo Guide) must be referenced explicitly if needed.
 
+    The actual arguments to `test_unit_a` will be a generic placeholder and have no meaning inside `test_unit_A`.
 
-2. Extend the notion of `#program` by allowing the use of functions instead of only constants.  This allows `#program` units with constants being tested. Here is a unit `step` that is tested with constant `a` being substituted with `2`:
+2. Within a test program, use `cannot` much like ASP constraints, only with a head. Its arguments are just for identification in the reporting.
 
-       #program step(a).
-    
-       #program test_step(step(2)).   % this feature is no longer present in `clingo-tests`.
+        #program step.
+        fact.
 
-   Note that using this feature makes the program incompatible with Clingo. The test runner has an option to transform a extended program back to compatible Clingo without running the tests.
+        #program test_step(step).
+        cannot("step fact")  :-  not fact(3).
 
+   Note that `"step fact"` is just a way of distinquishing the constraint. It can be an atom, a string, a number or anything else.
 
-3. Within a test program, use `assert` with `@all` to ensure universal truths that must be in every model. We use `@all` to communicate to the runtime that this particular assert must be checked for presence in every model. Its argument is just a name for identification.
+4. To enable testing constraints and to guard tests for empty model sets, we can optionally use `models` to set the expected number of models. In the example above, we would add:
 
-        #program step(n).
-        fact(n).
-
-        #program test_step(step(3)).
-        assert(@all("step fact"))  :-  fact(3).
-
-   Note that `"step fact"` is just a way of distinquishing the assert. It can be an atom, a string, a number or anything else. Pay attention to the uniqueness in case of variables in the body. Take note of point 5 below.
-
-   You can use `@any` instead of `@all` to assert truths that must be present in at least one model.
+        models(1).
 
 
-4. To enable testing constraints and to guard tests for empty model sets, we use `@models` to check for the expected number of models. In the example above, we would add:
+5. Note that `cannot` is much like an _constraint_ in `ASP`.  To assert `somefact` is true, we must use `not`:
 
-        assert(@models(1)).
+        somefact.
+        cannot("somefact must be true")  :-  not somefact.
 
-
-5. Care must be taken if variables in the body lead to expansion and conjunctions. See `duplicate_assert.lp`. The system gives a warning for:
-
-        assert(@all(id_uniq))  :-  def_id(Id, _, _),  { def_id(Id, _, _) } = 1.
-
-    Instead you have to write:
-
-        assert(@all(id_uniq(Id)))  :-  def_id(Id, _, _),  { def_id(Id, _, _) } = 1.
-
+    It is helpful to read `cannot` as _it cannot be the case that..._.  Alternatively, one can use `constraint` as an alias for `cannot`.  Just your preference.
 
