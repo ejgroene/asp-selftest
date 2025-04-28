@@ -35,7 +35,7 @@ def check_for_duplicate_test(raises:(Exception, "Duplicate test: 'test_a' found 
 
 
 @test
-def simple_program():
+def simple_program(stderr):
     t = parse_and_run_tests("""
         fact.
         #program test_fact(base).
@@ -48,7 +48,7 @@ def simple_program():
 
 
 @test
-def dependencies():
+def dependencies(stderr):
     t = parse_and_run_tests("""
         base_fact.
 
@@ -75,7 +75,7 @@ def dependencies():
 
 
 #@test   # passing parameters to programs is no longer supported
-def pass_constant_values():
+def pass_constant_values(stderr):
     t = parse_and_run_tests("""
         #program fact_maker(n).
         fact(n).
@@ -93,7 +93,7 @@ def pass_constant_values():
 
 
 @test
-def format_empty_model():
+def format_empty_model(stderr):
     r = parse_and_run_tests("""
         #program test_model_formatting.
         #external what.
@@ -111,7 +111,7 @@ cannot(test)
 
 
 @test
-def format_model_small():
+def format_model_small(stderr):
     import unittest.mock as mock
     r = parse_and_run_tests("""
         #program test_model_formatting.
@@ -133,7 +133,7 @@ cannot(test)
 
 
 @test
-def format_model_wide():
+def format_model_wide(stderr):
     import unittest.mock as mock
     r = parse_and_run_tests("""
         #program test_model_formatting.
@@ -155,7 +155,7 @@ cannot(test)
 
 
 @test
-def tester_basics():
+def tester_basics(stderr):
     t = parse_and_run_tests("""
     a.
     #program test_one(base).
@@ -166,7 +166,7 @@ def tester_basics():
 
 
 @test
-def alternative_models_predicate():
+def alternative_models_predicate(stderr):
     t = parse_and_run_tests("""
         #program test_x.
         models(1).
@@ -177,7 +177,7 @@ def alternative_models_predicate():
 
 
 #@test  this check is about to disappear because of none/cannot
-def warning_about_duplicate_assert():
+def warning_about_duplicate_assert(stderr):
     t = parse_and_run_tests("""
         #program test_one.
         #defined a/1. %a(1; 2).
@@ -194,7 +194,7 @@ def warning_about_duplicate_assert():
 
 
 @test
-def constraints_are_more_better(stdout):
+def constraints_are_more_better(stdout, stderr):
     # The idea is to writes asserts just like ASP constraints, but by providing a head (which in an 
     # ASP constraint can never be true) we catch the result, and if it is true, we raise AssertionError.
     # So the constraint does not work as a contraint in the sense that it limit the possible models, it

@@ -2,7 +2,10 @@
 """ Program argument and in-source test handling + some tests that introduce cyclic dependencies elsewhere. """
 
 import io
+import os
 import sys
+import subprocess
+import pathlib
 
 
 import clingo
@@ -10,7 +13,7 @@ from clingo import Control
 
 
 from .arguments import parse, maybe_silence_tester, parse_reify
-from .__main__ import main, clingo_plus, asp_reify
+from .__main__ import clingo_plus, asp_reify
 from .application import MainApp
 from .syntaxerrorhandler import SyntaxErrorHandler
 from .tester import TesterHook
@@ -48,7 +51,7 @@ def reify_print_path(stdout, argv):
 
 
 @test
-def use_own_python_function():
+def use_own_python_function(stderr):
     t = parse_and_run_tests("""
 #script (python)
 def echo(message):
@@ -64,6 +67,7 @@ models(1).
     test.eq({'testname': 'test_me', 'models': 1}, data)
     # implicitly tested by the fact that it does not raise exception on @echo()
     test.eq([], list(t))
+    test.startswith(stderr.getvalue(), "ASP FILE: ")
 
 
 @test
@@ -128,28 +132,26 @@ def maybe_shutup_selftest(argv):
 
 
 @test
-def main_entry_point_basics(stdin, stdout, argv):
-    stdin.write("a. #program test_a.")
-    stdin.seek(0)
-    main()
-    response = stdout.getvalue()
-    test.startswith(response, 'Reading <_io.StringIO')
-    test.endswith(response, 'ASPUNIT: test_a:  1 model\n')
+def main_entry_point_basics():
+    path = pathlib.Path(__file__).parent
+    p = subprocess.run(["python", "-c", f"from asp_selftest.__main__ import clingo_plus; clingo_plus()"],
+        env=os.environ | {'PYTHONPATH': path},
+        input=b"skaludicat. #program test_gotashparot(base).",
+        capture_output=True)
+    test.eq(b'ASP FILE: -, tests: 1.\n', p.stderr)
+    test.startswith(p.stdout, b"""\
+clingo+ version 5.7.1
+Reading from stdin
+ASPUNIT: test_gotashparot: Solving...
+Answer: 1
+skaludicat
+SATISFIABLE
 
-
-#@test  # --processor no longer supported
-def main_entry_processing_hook(stdin, stdout, argv):
-    argv += ['--processor', 'asp_selftest:test_hook']  # test_hook is in __init__.py
-    stdin.write("a.\n")
-    stdin.seek(0)
-    main()
-    response = stdout.getvalue()
-    test.startswith(response, 'Reading <_io.StringIO')
-    test.endswith(response, 'ASPUNIT: base:  2 asserts,  1 model\n')
+Models""", diff=test.diff)
 
 
 @test
-def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
+def clingo_drop_in_plus_tests(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f.lp'
     f.write_text('a. #program test_ikel.\n')
     argv += [f.as_posix()]
@@ -171,6 +173,7 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout):
     test.contains(s[10], '1st Model:')
     test.contains(s[10], 'Unsat:')
     test.startswith(s[11], 'CPU Time     : 0.00')
+    test.startswith(stderr.getvalue(), "ASP FILE: ")
 
 
 @test
@@ -195,7 +198,7 @@ def syntax_errors_basics(tmp_path):
 
 
 @test
-def tester_runs_tests(tmp_path, stdout):
+def tester_runs_tests(tmp_path, stdout, stderr):
     f = tmp_path/'f'
     f.write_text("""
     fact(a).
@@ -207,10 +210,11 @@ def tester_runs_tests(tmp_path, stdout):
         app.main(Control(), [f.as_posix()])
     test.eq('ASPUNIT: test_fact:  1 model\n',
             stdout.getvalue())
+    test.startswith(stderr.getvalue(), "ASP FILE: ")
 
 
 @test
-def clingo_dropin_default_hook_tests(tmp_path, argv, stdout):
+def clingo_dropin_default_hook_tests(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f'
     f.write_text("""
     fact(a).
@@ -226,6 +230,7 @@ def clingo_dropin_default_hook_tests(tmp_path, argv, stdout):
     s = stdout.getvalue()
     test.contains(s, 'ASPUNIT: test_fact_1:  1 model\n')
     test.contains(s, 'ASPUNIT: test_fact_2:  1 model\n')
+    test.startswith(stderr.getvalue(), "ASP FILE: ")
 
 
 @test
@@ -242,7 +247,7 @@ Models       : 0+""")
         e.exception.text)
 
 @test
-def access_python_script_functions(tmp_path, argv, stdout):
+def access_python_script_functions(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f'
     f.write_text("""
 #script (python)
@@ -257,7 +262,7 @@ models(1).
     clingo_plus()
     s = stdout.getvalue()
     test.contains(s, "ASPUNIT: test_one:  1 model")
-    #test.contains(s, 'assert(models(1)) assert("hello")')
+    test.startswith(stderr.getvalue(), "ASP FILE: ")
 
 
 @test.fixture
