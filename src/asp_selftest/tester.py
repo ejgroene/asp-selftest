@@ -193,7 +193,8 @@ class TesterHook:
         return ast, files
 
 
-    def ground(this, self, control, parameters, piggies=None):
+    #def ground(this, self, control, parameters, piggies=None):
+    def ground(this, self, control, parts, context, piggies):
         """ Grounds and solves the tests in each included file separately. """
         for filename, programs in this.files.items():
 
@@ -221,8 +222,9 @@ class TesterHook:
                 # We want to use a fresh control, and honor the existing handlers,
                 # so we derive our parameters from the existing ones, create a new
                 # control and dutyfully call self.[load|ground|solve]().
-                with parameters['context'].avec(tester) as testcontext:
-                    testparms = dict(parameters,
+                #with parameters['context'].avec(tester) as testcontext:
+                with context.avec(tester) as testcontext:
+                    testparms = dict(self.parameters,
                                      ###ast=parameters['ast'][:],    # don't let it grow with each test
                                      ast=fileast,
                                      parts=parts,
@@ -233,11 +235,13 @@ class TesterHook:
                     testcontrol = clingo.Control(args, logger=self.logger, message_limit=1)
                     #testcontrol.register_observer(tester)
                     self.load(testcontrol, testparms)
-                    self.next.ground(testcontrol, testparms)
+                    #self.next.ground(testcontrol, testparms)
+                    self.next.ground(testcontrol, parts, testcontext)
                     self.solve(testcontrol, testparms)
                     report = tester.report() | {'filename': filename, 'testname': prog_name}
                     this.on_report(report)
-        self.next.ground(control, parameters)
+        #self.next.ground(control, parameters)
+        self.next.ground(control, parts, context)
 
 from clingo.ast import ASTType
 

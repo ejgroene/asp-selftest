@@ -153,7 +153,7 @@ Models""", diff=test.diff)
 @test
 def clingo_drop_in_plus_tests(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f.lp'
-    f.write_text('a. #program test_ikel.\n')
+    f.write_text('a. #program test_ikel(base).\n')
     argv += [f.as_posix()]
     clingo_plus()
     s = stdout.getvalue().splitlines()

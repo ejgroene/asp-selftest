@@ -24,16 +24,12 @@ class MainApp(Application, AspSession, ExceptionGuard):
 
     def __init__(self, programs=None, handlers=(), arguments=()):
         AspSession.__init__(self, handlers=handlers)
-        #self.programs = programs  # TODO test
-        #self.handlers = handlers  # TODO test
-        #self.arguments = arguments  # TODO test
-        #self.parameters['arguments'] = arguments?
+        # we could add programs and arguments to the session, when needed
 
 
     @ExceptionGuard.guard
     def main(self, control, files):
-        self.parameters['files'] = files
-        self(control=control)
+        self(control, files=files)
 
 
     @ExceptionGuard.guard

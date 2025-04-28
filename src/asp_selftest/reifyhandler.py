@@ -56,12 +56,13 @@ class ReifyHandler:
 
         rules_added = set()
         ground = True
+        context = parameters['context']
         while ground:
             tmpcontrol = self.control(parameters)
             args = ()
             tmpcontrol = clingo.Control(args, logger=self.logger, message_limit=1)
             self.next.load(tmpcontrol, parameters)
-            self.next.ground(tmpcontrol, parameters)
+            self.next.ground(tmpcontrol, parts, context, piggies)
             ground = False
             for rule in reified_rules(tmpcontrol):
                 if rule not in rules_added:

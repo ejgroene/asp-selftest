@@ -98,10 +98,12 @@ class DefaultHandler:
                 add(node)
 
 
-    def ground(this, self, control, parameters, piggies=None):
+    #def ground(this, self, control, parameters, piggies=None):
+    def ground(this, self, control, parts=None, context=None, piggies=None):
         """ ground the given parts, using context """
-        parameters.setdefault('parts', [('base', ()),])
-        control.ground(parameters['parts'], context=parameters['context'])
+        if not parts:
+            parts = (('base', ''),)
+        control.ground(parts=parts, context=context)
 
 
     def solve(this, self, control, parameters, piggies=None):
@@ -134,8 +136,9 @@ class AspSession(Delegate):
             self.add_handler(handler)
 
 
-    def __call__(self, control=None, parts=None, **solve_options):
+    def __call__(self, control=None, parts=None, files=None, **solve_options):
         """ combine ground and solve for convenience """
+        self.parameters['files'] = files
         piggies = {}
         self.go_prepare(piggies=piggies)
         control = self.go_ground(control=control, parts=parts, piggies=piggies)
@@ -145,7 +148,7 @@ class AspSession(Delegate):
 
     def go_prepare(self, piggies=None):
         p = self.parameters
-        self.prepare(p, piggies=piggies)
+        #self.prepare(p, piggies=piggies)
         ast = self.parse(source=p['source'],
                          files=p['files'],
                          callback=None,
@@ -165,10 +168,11 @@ class AspSession(Delegate):
             raise ValueError(f"Cannot reuse Control {control}")
         else:
             self._spent_controls.add(control)
-        if parts is not None:
-            parameters['parts'] = parts
         self.load(control, parameters, piggies=piggies)
-        self.ground(control, parameters, piggies=piggies)
+        context = CompoundContext()
+        if 'context' in parameters and parameters['context'] is not None:
+            context.add_context(parameters['context'])
+        self.ground(control, parts, context, piggies)
         return control
 
 
@@ -267,9 +271,9 @@ def hook_basics():
 
 # for testing hooks
 class TestHaak:
-    def ground(this, self, control, parameters, piggies=None):
+    def ground(this, self, control, parts, context, piggies=None):
         control.add('testhook(ground).')
-        self.next.ground(control, parameters)
+        self.next.ground(control, parts, context, piggies)
 
 
 @test
@@ -305,13 +309,13 @@ def hook_in_ASP_is_too_late_for_some_methods(stdout):
 def multiple_hooks():
     session = AspSession('boe.')
     class Hook1():
-        def ground(this, self, control, parameters, piggies=None):
+        def ground(this, self, control, parts, context, piggies):
             control.add('hook_1.')
-            self.next.ground(control, parameters, piggies=piggies)
+            self.next.ground(control, parts, context, piggies)
     class Hook2():
-        def ground(this, self, control, parameters, piggies=None):
+        def ground(this, self, control, parts, context, piggies):
             control.add('hook_2.')
-            self.next.ground(control, parameters, piggies=piggies)
+            self.next.ground(control, parts, context, piggies)
     h1 = Hook1()
     h2 = Hook2()
     session.add_delegatee(h1)
@@ -351,9 +355,9 @@ def select_parts():
 
 
 class ThreeContextsHandler:
-    def ground(this, self, control, parameters, piggies=None):
-        parameters['context'].add_context(this)
-        self.next.ground(control, parameters, piggies=piggies)
+    def ground(this, self, control, parts, context, piggies):
+        context.add_context(this)
+        self.next.ground(control, parts, context, piggies)
     def b(this):
         return  clingo.Number(19)
 
