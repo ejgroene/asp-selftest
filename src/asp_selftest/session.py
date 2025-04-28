@@ -183,10 +183,6 @@ class AspSession(Delegate):
         return r
 
 
-    def __getitem__(self, name):
-        return self.parameters[name]
-
-
     def add_handler(self, handler, position=0, log=False):
         try:
             self.add_delegatee(handler, position=position)
