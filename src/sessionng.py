@@ -32,10 +32,6 @@ def Noop(next, *args):
     return next(*args)
 
     
-class Error:
-    pass
-    
-    
 def default_control(control=None, arguments=(), logger=None, message_limit=20, **etc):
     """ Creates a Control when none is given (when used without clingo_main)."""
 
@@ -50,7 +46,10 @@ def default_control(control=None, arguments=(), logger=None, message_limit=20, *
     return prepare, Noop, Noop, Noop
 
 
-def clingo_default_control(files=(), context=None, yield_=False, parts=(), **etc):
+def clingo_default_control(source=None, files=(), parts=(('base', ()),), 
+                           arguments=(), logger=None, message_limit=20,
+                           control=None, context=None,
+                           **solve_options):
     """ Controller implementing the default Clingo behaviour. """
 
     def load(next, control):
@@ -63,7 +62,7 @@ def clingo_default_control(files=(), context=None, yield_=False, parts=(), **etc
         control.ground(parts=parts, context=context)
                 
     def solve(next, control):
-        return control.solve(on_model=None, yield_=yield_)
+        return control.solve(**solve_options)
 
     return Noop, load, ground, solve
 
@@ -80,7 +79,7 @@ def source_support_control(source=None, **etc):
     return Noop, load, Noop, Noop
 
 
-def ik_wil_logger_afvangen_control(logger, **etc):
+def ik_wil_logger_afvangen_control(logger=None, **etc):
     def prepare(next):
         pass
     return Noop, Noop, Noop, Noop
@@ -92,36 +91,10 @@ controllers = [ik_wil_logger_afvangen_control,
                clingo_default_control]
    
     
-def clingo_session(
-        source=None,
-        files=(),
-        arguments=(),          # \   <= Clingo cmdline specifiek
-        logger=None,           #  | inputs for making Control
-        message_limit=20,      #  |
-        control=None,          # /
-        parts=(('base', ()),),
-        context=None,
-        assumptions=(),
-        on_model=None,
-        on_sat=None,
-        on_statistics=None,
-        on_finish=None,
-        on_core=None,
-        on_last=None,
-        yield_=False,
-        async_=False):
+def clingo_session(**kwargs):
 
     controller_functions = [
-        controller(
-            source=source,
-            files=files,
-            arguments=arguments,
-            logger=logger,
-            message_limit=message_limit,
-            control=control,
-            parts=parts,
-            context=context,
-            yield_=yield_)
+        controller(**kwargs)
         for controller in controllers]
 
     def call(i, n, *args):
