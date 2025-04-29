@@ -21,7 +21,7 @@ class Main:
 
     #@guard
     def logger(self, code, message):
-        print("Main.logger:", code, message)
+        print("Main.logger:", code, message, file=sys.stderr)
 
 
 # entry point
@@ -34,13 +34,11 @@ def Noop(next, *args):
 
 
 def default_control_handlers(control=None, arguments=(), logger=None, message_limit=20, **etc):
-    """ Creates a Control when none is given (when used without clingo_main)."""
+    """ Creates a Control when no one else does."""
 
     def init(next):
-        if control:
+        if control := next():
             return control
-        if ctrl := next():
-            return ctrl
         return clingo.Control(arguments=arguments, logger=logger, message_limit=message_limit)
 
     return init, Noop, Noop, Noop
