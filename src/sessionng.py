@@ -17,20 +17,16 @@ class Main:
     message_limit = 20
 
     def main(self, control, files):
-        clingo_session(control=control, files=files, logger=self.logger, message_limit=self.message_limit)
+        clingo_session(control=control, files=files, logger=self.logger,
+                       message_limit=self.message_limit, main=self)
 
     #@guard
     def logger(self, code, message):
-        print("Main.logger:", code, message, file=sys.stderr)
+        self._logger(code, message)
 
-
-# entry point
-def clingo_plus_main_ng():
-    clingo.application.clingo_main(Main(), arguments=())
-
-
-def Noop(next, *args):
-    return next(*args)
+        
+    def set_logger(self, logger_chain):
+        self._logger = logger_chain
 
 
 def default_control_handlers(control=None, arguments=(), logger=None, message_limit=20, **etc):
@@ -41,7 +37,7 @@ def default_control_handlers(control=None, arguments=(), logger=None, message_li
             return control
         return clingo.Control(arguments=arguments, logger=logger, message_limit=message_limit)
 
-    return init, Noop, Noop, Noop
+    return Noop, init, Noop, Noop, Noop
 
 
 def clingo_default_handlers(source=None, files=(), parts=(('base', ()),), 
@@ -49,6 +45,9 @@ def clingo_default_handlers(source=None, files=(), parts=(('base', ()),),
                            control=None, context=None, plugins=(),
                            **solve_options):
     """ Controller implementing the default Clingo behaviour. """
+
+    def logger(next, code, message):
+        print("DEFAULT.logger:", code, message, file=sys.stderr)
 
     def init(next):
         return control
@@ -65,7 +64,7 @@ def clingo_default_handlers(source=None, files=(), parts=(('base', ()),),
     def solve(next, control):
         return control.solve(**solve_options)
 
-    return init, load, ground, solve
+    return logger, init, load, ground, solve
 
     
 def source_support_handlers(source=None, **etc):
@@ -77,7 +76,7 @@ def source_support_handlers(source=None, **etc):
         else:
             next(control)
 
-    return Noop, load, Noop, Noop
+    return Noop, Noop, load, Noop, Noop
 
 
 default_plugins = (
@@ -87,12 +86,20 @@ default_plugins = (
 )
    
     
-Handler = enum.IntEnum('Handler', ['INIT', 'LOAD', 'GROUND', 'SOLVE'], start=0)
+Handler = enum.IntEnum('Handler', ['LOGGER', 'INIT', 'LOAD', 'GROUND', 'SOLVE'], start=0)
 
 
-def clingo_session(plugins=default_plugins, **kwargs):
-    
-    handlerssets = [plugin(plugins=plugins, **kwargs) for plugin in plugins]
+def clingo_session(plugins=default_plugins, main=None, logger=None, **kwargs):
+
+    def redirect_logger(code, message):
+        caller(0, Handler.LOGGER)(code, message)
+
+    if main:
+        main.set_logger(redirect_logger)
+    if not logger:
+        logger = redirect_logger
+
+    handlerssets = [plugin(plugins=plugins, logger=logger, **kwargs) for plugin in plugins]
 
     def caller(i, h):
         if i >= len(plugins):
@@ -100,6 +107,7 @@ def clingo_session(plugins=default_plugins, **kwargs):
         handler = handlerssets[i][h]
         @functools.wraps(handler)
         def call(*args):
+            print(f"call: {handler.__qualname__}")
             return handler(caller(i+1, h), *args)
         return call
 
@@ -109,6 +117,11 @@ def clingo_session(plugins=default_plugins, **kwargs):
     return caller(0, Handler.SOLVE)(control)
         
 
+# entry point
+def clingo_plus_main_ng():
+    clingo.application.clingo_main(Main(), arguments=())
+
+
 def run_clingo_plus_main(code):
     path = pathlib.Path(__file__).parent
     return subprocess.run(
@@ -117,6 +130,10 @@ def run_clingo_plus_main(code):
         input=code,
         capture_output=False)
         
+def Noop(next, *args):
+    return next(*args)
+
+
 @test
 def from_clingo_main(stdout):
     run_clingo_plus_main(b"owkee. #program test_owkee(base).")
@@ -146,7 +163,7 @@ def have_my_own_handler_doing_nothing():
         def logme(*args):
             log.append((*plugins, *args))
             return len(log)
-        return logme, logme, logme, logme
+        return Noop, logme, logme, logme, logme
     result = clingo_session(plugins=[my_own_handler])
     test.eq(4, result)
     test.eq([
