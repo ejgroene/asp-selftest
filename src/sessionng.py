@@ -3,6 +3,7 @@ import subprocess
 import os
 import sys
 import functools
+import enum
 
 import clingo
 import selftest
@@ -31,26 +32,28 @@ def clingo_plus_main_ng():
 def Noop(next, *args):
     return next(*args)
 
-    
-def default_control(control=None, arguments=(), logger=None, message_limit=20, **etc):
+
+def default_control_handlers(control=None, arguments=(), logger=None, message_limit=20, **etc):
     """ Creates a Control when none is given (when used without clingo_main)."""
 
-    def prepare(next):
+    def init(next):
         if control:
             return control
-        ctrl = next()
-        if ctrl:
+        if ctrl := next():
             return ctrl
         return clingo.Control(arguments=arguments, logger=logger, message_limit=message_limit)
 
-    return prepare, Noop, Noop, Noop
+    return init, Noop, Noop, Noop
 
 
-def clingo_default_control(source=None, files=(), parts=(('base', ()),), 
+def clingo_default_handlers(source=None, files=(), parts=(('base', ()),), 
                            arguments=(), logger=None, message_limit=20,
-                           control=None, context=None,
+                           control=None, context=None, plugins=(),
                            **solve_options):
     """ Controller implementing the default Clingo behaviour. """
+
+    def init(next):
+        return control
 
     def load(next, control):
         for f in files:
@@ -64,10 +67,10 @@ def clingo_default_control(source=None, files=(), parts=(('base', ()),),
     def solve(next, control):
         return control.solve(**solve_options)
 
-    return Noop, load, ground, solve
+    return init, load, ground, solve
 
     
-def source_support_control(source=None, **etc):
+def source_support_handlers(source=None, **etc):
     """ Loads source given as string. """
 
     def load(next, control):
@@ -79,36 +82,33 @@ def source_support_control(source=None, **etc):
     return Noop, load, Noop, Noop
 
 
-def ik_wil_logger_afvangen_control(logger=None, **etc):
-    def prepare(next):
-        pass
-    return Noop, Noop, Noop, Noop
-
-
-controllers = [ik_wil_logger_afvangen_control,
-               default_control,
-               source_support_control,
-               clingo_default_control]
+default_plugins = (
+    default_control_handlers,
+    source_support_handlers,
+    clingo_default_handlers
+)
    
     
-def clingo_session(**kwargs):
+Handler = enum.IntEnum('Handler', ['INIT', 'LOAD', 'GROUND', 'SOLVE'], start=0)
 
-    controller_functions = [
-        controller(**kwargs)
-        for controller in controllers]
 
-    def call(i, n, *args):
-        func = controller_functions[i][n]
-        print(f"CALL {i}/{n}: {func.__qualname__}{args}", file=sys.stderr)
-        def next(*a):
-            if i < len(controller_functions) -1:
-                return call(i+1, n, *a)
-        return func(next, *args)
+def clingo_session(plugins=default_plugins, **kwargs):
+    
+    handlerssets = [plugin(plugins=plugins, **kwargs) for plugin in plugins]
 
-    control = call(0, 0)
-    call(0, 1, control)
-    call(0, 2, control)
-    return call(0, 3, control)
+    def caller(i, h):
+        if i >= len(plugins):
+            return Noop
+        handler = handlerssets[i][h]
+        @functools.wraps(handler)
+        def call(*args):
+            return handler(caller(i+1, h), *args)
+        return call
+
+    control = caller(0, Handler.INIT)()
+    caller(0, Handler.LOAD)(control)
+    caller(0, Handler.GROUND)(control)
+    return caller(0, Handler.SOLVE)(control)
         
 
 def run_clingo_plus_main(code):
@@ -139,3 +139,23 @@ def test_logger():
     with test.raises(RuntimeError, "parsing failed"):
         clingo_session(source='0.', logger=my_log)
     test.eq([(clingo.MessageCode.RuntimeError, '<block>:1:2-3: error: syntax error, unexpected .\n')], log)
+
+
+@test
+def have_my_own_handler_doing_nothing():
+    log = []
+    def my_own_handler(logger=None, plugins=(), **etc):
+        def logme(*args):
+            log.append((*plugins, *args))
+            return len(log)
+        return logme, logme, logme, logme
+    result = clingo_session(plugins=[my_own_handler])
+    test.eq(4, result)
+    test.eq([
+        (my_own_handler, Noop,),
+        (my_own_handler, Noop, 1),
+        (my_own_handler, Noop, 1),
+        (my_own_handler, Noop, 1),
+    ], log)
+
+        
