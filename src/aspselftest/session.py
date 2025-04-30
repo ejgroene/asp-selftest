@@ -55,7 +55,7 @@ def clingo_session_base(main=None, logger=None, plugins=(), source=None, files=(
         handler = handlerssets[i][h]
         @functools.wraps(handler)
         def call(*args):
-            print(f"call: {handler.__qualname__}({', '.join(map(str,args))})", file=sys.stderr)
+            #print(f"call: {handler.__qualname__}({', '.join(map(str,args))})", file=sys.stderr)
             return handler(caller(i+1, h), *args)
         return call
 

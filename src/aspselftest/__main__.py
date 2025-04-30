@@ -26,8 +26,8 @@ default_plugins = (
 )
    
 
-def clingo_session(**etc):
-    return clingo_session_base(plugins=default_plugins, **etc)
+def clingo_session(plugins=(), **etc):
+    return clingo_session_base(plugins=[*plugins, *default_plugins], **etc)
 
 
 # entry point
@@ -117,8 +117,8 @@ aspselftest.plugins.messageparser.AspSyntaxError: syntax error, unexpected EOF
 def run_a_succeeding_test(stdout, stderr):
     control, handle = clingo_session(
         source='a. #program test_a(base). cannot(a) :- not a.', yield_=True,
-        label='with_tests', plugins=[testrunner_plugin, *default_plugins])
-    test.eq(stdout.getvalue(), "<with_tests>\n  test_a(base)\n")
+        label='with_tests')
+    test.endswith(stdout.getvalue(), "-with_tests.lp\n  test_a(base)\n")
     test.eq(stderr.getvalue(), "")
     with handle:
         result = handle.get()
@@ -129,13 +129,11 @@ def run_a_succeeding_test(stdout, stderr):
 @test
 def run_a_failing_test(stdout, stderr):
     with test.raises(AssertionError) as e:
-        clingo_session(
-            source='#program test_b(base). cannot(base).',
-            plugins=[testrunner_plugin, *default_plugins])
-    test.eq(stdout.getvalue(), "<string>\n  test_b(base)\n")
+        clingo_session(source='#program test_b(base). cannot(base).')
+    test.endswith(stdout.getvalue(), "-string.lp\n  test_b(base)\n")
     test.eq(stderr.getvalue(), "")
     test.eq('cannot("N/A")' , str(e.exception))
-    test.eq(['File <string>, line 1, in test_b(base).'] , e.exception.__notes__)
+    test.endswith(e.exception.__notes__[0], "-string.lp, line 1, in test_b(base).")
 
 
 @test
@@ -143,16 +141,8 @@ def run_a_mixed_test(stdout, stderr):
     with test.raises(AssertionError) as e:
         clingo_session(
             source='a. #program test_a(base). cannot(a) :- not a. #program test_b(base). cannot(b).',
-            label='two_tests', plugins=[errorplugin, testrunner_plugin, *default_plugins])
-    test.eq(stdout.getvalue(), "<two_tests>\n  test_a(base)\n  test_b(base)\n")
+            label='two_tests')
+    test.endswith(stdout.getvalue(), "-two_tests.lp\n  test_a(base)\n  test_b(base)\n")
     test.eq(stderr.getvalue(), "")
     test.eq('cannot(b)' , str(e.exception))
-    test.eq(["File <two_tests>, line 1, in test_b(base)."] , e.exception.__notes__)
-
-
-@test
-def asp_test_with_error():
-        clingo_session(
-            source='a. #program test_a(base)',
-            plugins=[testrunner_plugin, *default_plugins])
-    
+    test.endswith(e.exception.__notes__[0], "-two_tests.lp, line 1, in test_b(base).")

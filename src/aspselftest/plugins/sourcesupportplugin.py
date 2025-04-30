@@ -13,7 +13,7 @@ def sourcesupport_plugin(source=None, label=None, **etc):
 
     def load(next, control, source, files):
         if source:
-            tmpfiles[0] = tempfile.NamedTemporaryFile('w', suffix=f"-{label}.lp") 
+            tmpfiles[0] = tempfile.NamedTemporaryFile('w', suffix=f"-{label or 'string'}.lp") 
             tmpfiles[0].write(source)
             tmpfiles[0].flush()
             files = (tmpfiles[0].name, *files)
