@@ -111,14 +111,14 @@ def clingo_session(plugins=default_plugins, main=None, logger=None, **kwargs):
         handler = handlerssets[i][h]
         @functools.wraps(handler)
         def call(*args):
-            #print(f"call: {handler.__qualname__}")  make --log flag
+            #print(f"call: {handler.__qualname__}", file=sys.stderr)
             return handler(caller(i+1, h), *args)
         return call
 
     control = caller(0, Handler.INIT)()
     caller(0, Handler.LOAD)(control)
     caller(0, Handler.GROUND)(control)
-    return caller(0, Handler.SOLVE)(control)
+    return control, caller(0, Handler.SOLVE)(control)
         
 
 # entry point
@@ -146,7 +146,7 @@ def from_clingo_main(stdout):
         
 @test
 def test_simple():
-    result = clingo_session(source="a.")
+    control, result = clingo_session(source="a.")
     test.truth(result.satisfiable)
 
 
@@ -169,7 +169,7 @@ def have_my_own_handler_doing_nothing():
             log.append((*plugins, *args))
             return len(log)
         return logme, logme, logme, logme, logme
-    result = clingo_session(plugins=[my_own_handler], more='here')
+    control, result = clingo_session(plugins=[my_own_handler], more='here')
     test.eq({'more': 'here'}, log[0])
     test.eq(5, result)
     test.eq([
@@ -180,3 +180,14 @@ def have_my_own_handler_doing_nothing():
     ], log[1:])
 
         
+@test
+def some_parts(stdout):
+    """ this test mainly shows that control must be kept alive """
+    control, handle = clingo_session(
+            source='a. #program test_a(base). cannot(a).',
+            parts=[('base', ()), ('test_a', (clingo.Number(42),))],
+            yield_=True)
+    with handle:
+        result = handle.get()
+        test.truth(result.satisfiable)
+        test.eq("a cannot(a)", str(handle.model()))
