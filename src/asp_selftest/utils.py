@@ -13,7 +13,7 @@ def find_symbol(ctl, name, arity=0):
     return str(next(ctl.symbolic_atoms.by_signature(name, arity)).symbol)
 
 
-def is_processor_predicate(p):
+def is_processor_predicate(p, givenname='processor'):
     """ check if p is a processor(<classname>) and return <classname> """
     if p.ast_type == clingo.ast.ASTType.Rule:
         p = p.head
@@ -23,7 +23,7 @@ def is_processor_predicate(p):
                 p = p.symbol
                 if p.ast_type == clingo.ast.ASTType.Function:
                     name, args = p.name, p.arguments
-                    if name == 'processor':
+                    if name == givenname:
                         p = args[0]
                         if p.ast_type == clingo.ast.ASTType.SymbolicTerm:
                             p = p.symbol

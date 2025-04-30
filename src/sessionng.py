@@ -5,10 +5,13 @@ import sys
 import functools
 import enum
 
-import clingo
+import clingo.ast
 import selftest
 
 test = selftest.get_tester(__name__)
+
+
+from asp_selftest.utils import is_processor_predicate as is_predicate
 
 
 class Main:
@@ -42,12 +45,13 @@ def default_control_handlers(control=None, arguments=(), logger=None, message_li
 
 def clingo_default_handlers(source=None, files=(), parts=(('base', ()),), 
                            arguments=(), logger=None, message_limit=20,
-                           control=None, context=None, plugins=(),
+                           control=None, context=None, plugins=(), label=None,
                            **solve_options):
     """ Controller implementing the default Clingo behaviour. """
 
     def logger(next, code, message):
-        print("DEFAULT.logger:", code, message, file=sys.stderr)
+        #print("DEFAULT.logger:", code, message, file=sys.stderr)
+        pass
 
     def init(next):
         return control
@@ -107,7 +111,7 @@ def clingo_session(plugins=default_plugins, main=None, logger=None, **kwargs):
         handler = handlerssets[i][h]
         @functools.wraps(handler)
         def call(*args):
-            print(f"call: {handler.__qualname__}")
+            #print(f"call: {handler.__qualname__}")  make --log flag
             return handler(caller(i+1, h), *args)
         return call
 
@@ -130,8 +134,8 @@ def run_clingo_plus_main(code):
         input=code,
         capture_output=False)
         
-def Noop(next, *args):
-    return next(*args)
+def Noop(next, *args, **kwargs):
+    return next(*args, **kwargs)
 
 
 @test
@@ -160,17 +164,19 @@ def test_logger():
 def have_my_own_handler_doing_nothing():
     log = []
     def my_own_handler(logger=None, plugins=(), **etc):
+        log.append(etc)
         def logme(*args):
             log.append((*plugins, *args))
             return len(log)
-        return Noop, logme, logme, logme, logme
-    result = clingo_session(plugins=[my_own_handler])
-    test.eq(4, result)
+        return logme, logme, logme, logme, logme
+    result = clingo_session(plugins=[my_own_handler], more='here')
+    test.eq({'more': 'here'}, log[0])
+    test.eq(5, result)
     test.eq([
         (my_own_handler, Noop,),
-        (my_own_handler, Noop, 1),
-        (my_own_handler, Noop, 1),
-        (my_own_handler, Noop, 1),
-    ], log)
+        (my_own_handler, Noop, 2),
+        (my_own_handler, Noop, 2),
+        (my_own_handler, Noop, 2),
+    ], log[1:])
 
         
