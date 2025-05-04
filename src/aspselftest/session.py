@@ -4,6 +4,7 @@ import os
 import sys
 import functools
 import enum
+import tempfile
 
 import clingo.ast
 import selftest
@@ -86,19 +87,25 @@ class ExitCode(enum.IntEnum):
 def test_session2_clingo_sequencing(tmp_path):
 
     def clingo_defaults_plugin(next, control=None, files=(), **etc):
+        
         def logger(code, message):
             print("LOG:", code, message)
+                    
         def load():
             for filename in files:
                 control.load(filename)
+                        
         return logger, load, control.ground, control.solve
 
     def clingo_sequencer_plugin(next, **etc):
+        
         logger, load, ground, solve = next(**etc)
+                
         def main():
             load()
             ground()
             return solve()
+                
         return logger, main
 
     def error_handling_plugin(next, **etc):
@@ -120,32 +127,51 @@ def test_session2_clingo_sequencing(tmp_path):
         return logger, main
 
     def clingo_main_plugin(next, arguments=(), **etc):
-        class Main:
+                
+        class App:
+                    
             def main(self, control, files):
-                self._keepsafe = control
                 self._logger, main = next(control=control, files=files, **etc)
                 self.result = main()
+                        
             def logger(self, code, message):
                 self._logger(code, message)
+                        
         def main():
-            app = Main()
+            app = App()
             err = clingo.clingo_main(app, arguments)
             if isinstance(app.result, Exception):
                 assert err in (ExitCode.UNKNOWN, ExitCode.ERROR), f"ExitCode {err!r}"
                 raise app.result
             return app.result
+                
         return main
 
-    plugins = (clingo_main_plugin, error_handling_plugin, clingo_sequencer_plugin, clingo_defaults_plugin)
+    def source_plugin(next, source=None, label='string', files=(), **etc):
+        
+        keep_file = None
+                
+        if source:
+            keep_file = tempfile.NamedTemporaryFile('w', suffix=f"-{label}.lp") 
+            keep_file.write(source)
+            keep_file.flush()
+            files=(keep_file.name, *files)
+                    
+        def main():
+            keep_file
+            return _main()
+                
+        logger, _main = next(files=files, **etc)
+        return logger, main
+
+    plugins = (clingo_main_plugin, source_plugin, error_handling_plugin, clingo_sequencer_plugin, clingo_defaults_plugin)
     file1 = tmp_path/'file1.lp'
     file1.write_text('a.')
     result = session2(plugins=plugins, arguments=(file1.as_posix(),))
     test.eq(True, result.satisfiable)
-    file2 = tmp_path/'file2.lp'
-    file2.write_text('error')
     with test.raises(SyntaxError) as e:
-        session2(plugins=plugins, arguments=(file2.as_posix(),))
-    test.eq(f"{file2}:2:1-2: error: syntax error, unexpected EOF\n", str(e.exception))
+        session2(plugins=plugins, source="error", label='yellow')
+    test.endswith(str(e.exception), f"-yellow.lp:2:1-2: error: syntax error, unexpected EOF\n")
 
 
 def clingo_session_base(main=None, logger=None, plugins=(), source=None, files=(), **kwargs):
