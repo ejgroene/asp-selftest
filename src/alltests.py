@@ -5,7 +5,7 @@ coverage = coverage.Coverage(source_pkgs=["aspselftest"])
 coverage.erase()
 coverage.start()
 
-import aspselftest.session
+import aspselftest.session2
 
 #import asp_selftest.arguments_tests
 #import asp_selftest.utils
