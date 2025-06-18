@@ -106,7 +106,7 @@ def pass_arguments_to_files(tmp_path, stdout):
 
 
 @test
-def forward_logger():
+def forward_logger(stdout):
     trace = []
     def next(control=None, files=()):
         def next_main():
