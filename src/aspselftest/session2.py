@@ -18,8 +18,9 @@ import tempfile
 
 import selftest
 
+from .plugins.clingoexitcodes import ExitCode
+
 from .plugins._testplugins import (
-    ExitCode,
     source_plugin,
     clingo_control_plugin,
     clingo_message_to_error_plugin,
@@ -126,3 +127,11 @@ def test_session2_not_wat():
     with solve_handle as result:
         for model in result:
             test.eq('a b c(a)', str(model))
+
+
+@test
+def session_with_file(tmp_path):
+    file1 = tmp_path/'test.lp'
+    file1.write_text('test(1).')
+    solveresult = clingo_session(files=(file1.as_posix(),))
+    test.truth(solveresult.satisfiable)
