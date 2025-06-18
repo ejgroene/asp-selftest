@@ -4,20 +4,6 @@ import clingo.ast
 
 
 
-def clingo_control_plugin(next, control=None, **etc):
-    """ Provides a default control when there is none. """
-    
-    def logger(code, message):
-        _logger(code, message)
-    
-    if not control:
-        control = clingo.Control(logger=logger)
-
-    _logger, main = next(control=control, **etc)
-        
-    return main
-
-
 def clingo_message_to_error_plugin(next, **etc):
     """ Takes clingo log message to raise rich exception."""
 

@@ -72,6 +72,7 @@ def no_source_given():
         trace.append(extra)
         def next_main():
             trace.append('next_main')
+            return 42
         return next_main
             
     main = source_plugin(
@@ -82,7 +83,8 @@ def no_source_given():
     test.eq(('b.lp',), trace[0])
     test.eq('more', trace[1])
     test.eq(2, len(trace))
-    main()
+    r = main()
+    test.eq(42, r)
     test.eq('next_main', trace[2])
     test.eq(3, len(trace))
     
