@@ -4,26 +4,6 @@ import clingo.ast
 
 
 
-def clingo_message_to_error_plugin(next, **etc):
-    """ Takes clingo log message to raise rich exception."""
-
-    _logger, _main = next(**etc)
-
-    exception = []
-
-    def logger(code, message):
-        _logger(code, message)
-        exception.append(SyntaxError(message))
-
-    def main():
-        try:
-            return _main()
-        except RuntimeError as e:
-            raise exception.pop()
-            
-    return logger, main
-
-
 def clingo_sequencer_plugin(next, **etc):
     """ Breaks down main into Clingo-specific steps. """
     

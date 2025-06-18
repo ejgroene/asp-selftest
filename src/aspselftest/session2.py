@@ -23,12 +23,12 @@ from .plugins.clingoexitcodes import ExitCode
 from .plugins import (
     clingo_main_plugin,
     source_plugin,
-    clingo_control_plugin
+    clingo_control_plugin,
+    clingo_syntaxerror_plugin,
 )
 
 
 from .plugins._testplugins import (
-    clingo_message_to_error_plugin,
     clingo_sequencer_plugin,
     clingo_defaults_plugin,
 )
@@ -83,7 +83,7 @@ def test_session2_sequencing():
 
    
 common_plugins = (
-    clingo_message_to_error_plugin,
+    clingo_syntaxerror_plugin,
     clingo_sequencer_plugin,
     clingo_defaults_plugin,
 )
