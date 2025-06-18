@@ -14,11 +14,19 @@ import subprocess
 import os
 import sys
 import functools
-import enum
 import tempfile
 
-import clingo.ast
 import selftest
+
+from .plugins._testplugins import (
+    ExitCode,
+    source_plugin,
+    clingo_control_plugin,
+    clingo_message_to_error_plugin,
+    clingo_sequencer_plugin,
+    clingo_defaults_plugin,
+    clingo_main_plugin,
+)
 
 test = selftest.get_tester(__name__)
 
@@ -68,126 +76,53 @@ def test_session2_sequencing():
     test.eq(None, session2(plugins=(sequencer_plugin, hello_goodbye_plugin,), name="John"))
     test.eq(['Hi John!', 'Jo John!'], trace)
 
+   
+common_plugins = (
+    clingo_message_to_error_plugin,
+    clingo_sequencer_plugin,
+    clingo_defaults_plugin,
+)
 
-# ExitCode, see clasp_app.h
-class ExitCode(enum.IntEnum):
-    UNKNOWN   =   0  #/*!< Satisfiability of problem not known; search not started.   */
-    INTERRUPT =   1  #/*!< Run was interrupted.                                       */
-    SAT       =  10  #/*!< At least one model was found.                              */
-    EXHAUST   =  20  #/*!< Search-space was completely examined.                      */
-    MEMORY    =  33  #/*!< Run was interrupted by out of memory exception.            */
-    ERROR     =  65  #/*!< Run was interrupted by internal error.                     */
-    NO_RUN    = 128  #/*!< Search not started because of syntax or command line error.*/
+def clingo_main_session(**kwargs):
+    return session2(
+        plugins=(
+            clingo_main_plugin,
+            *common_plugins),
+        **kwargs)
+
+def clingo_session(**kwargs):
+    return session2(
+        plugins=(
+            source_plugin,
+            clingo_control_plugin,
+            *common_plugins),
+        **kwargs)
+
 
 @test
-def test_session2_clingo_sequencing(tmp_path):
-
-    def clingo_defaults_plugin(next, control=None, files=(), **etc):
-        
-        def logger(code, message):
-            print("LOG:", code, message)
-                    
-        def load():
-            for filename in files:
-                control.load(filename)
-                        
-        return logger, load, control.ground, control.solve
-
-    def clingo_sequencer_plugin(next, **etc):
-        
-        logger, load, ground, solve = next(**etc)
-                
-        def main():
-            load()
-            ground()
-            return solve()
-                
-        return logger, main
-
-    def source_plugin(next, source=None, label='string', files=(), **etc):
-        
-        keep_file = None
-                
-        if source:
-            keep_file = tempfile.NamedTemporaryFile('w', suffix=f"-{label}.lp") 
-            keep_file.write(source)
-            keep_file.flush()
-            files=(keep_file.name, *files)
-                    
-        def main():
-            keep_file
-            return _main()
-                
-        logger, _main = next(files=files, **etc)
-        return logger, main
-
-    def clingo_main_plugin(next, arguments=(), **etc):
-        """ Uses clingo_main() to drive the plugins. """
-                
-        class App:
-            """ As per Clingo spec: callbacks main() and logger(). """
-                    
-            def main(self, control, files):
-                self._logger, _main = next(control=control, files=files, **etc)  # [3]
-                self.result = _main()
-                        
-            def logger(self, code, message):
-                self._logger(code, message)
-                        
-        def main():
-            app = App()
-            app.exitcode = clingo.clingo_main(app, arguments)  # [2]
-            # do not know what to do with exitcode yet
-            #assert err in (ExitCode.UNKNOWN, ExitCode.ERROR), f"ExitCode {err!r}"
-            return app.result
-                
-        return main  #[1]
-
-    class error_handling_plugin:
-        
-        def after(next, **etc):
-
-            _exception = None
-            _logger, _main = next(**etc)
-            
-            def logger(code, message):
-                nonlocal _exception
-                _exception = SyntaxError(message)
-                        
-            def main():
-                try:
-                    return _main()
-                except RuntimeError as e:
-                    assert str(e) in ['parsing failed']
-                    return _exception if _exception else e
-                        
-            return logger, main
-
-        def before(next, **etc):
-            
-            _main = next(**etc)
-                    
-            def main():
-                result = _main()
-                if isinstance(result, Exception):     # [4]
-                    raise result
-                return result
-                    
-            return main
-        
-
-
-    plugins = (
-        error_handling_plugin.before,  # raises errors if any
-        clingo_main_plugin,
-        error_handling_plugin.after,   # catches all errors
-        source_plugin,
-        clingo_sequencer_plugin,
-        clingo_defaults_plugin)
+def clingo_main_session_happy_flow(tmp_path):
     file1 = tmp_path/'file1.lp'
     file1.write_text('a.')
-    result = session2(plugins=plugins, arguments=(file1.as_posix(),))
-    test.eq(True, result.satisfiable)
+    exitcode = clingo_main_session(arguments=(file1.as_posix(),))
+    test.eq(exitcode, ExitCode.SAT)
+
+@test
+def clingo_main_session_error(tmp_path):
+    file1 = tmp_path/'error.lp'
+    file1.write_text('error')
+    with test.raises(SyntaxError):
+        clingo_main_session(arguments=(file1.as_posix(),))
+
+@test
+def session_with_source():
     with test.raises(SyntaxError) as e:
-        session2(plugins=plugins, source="error", label='yellow')
+        clingo_session(source="error", label='yellow')
     test.endswith(str(e.exception), f"-yellow.lp:2:1-2: error: syntax error, unexpected EOF\n")
+
+
+@test
+def test_session2_not_wat():
+    solve_handle = clingo_session(source="a. b. c(a).", yield_=True)
+    with solve_handle as result:
+        for model in result:
+            test.eq('a b c(a)', str(model))
