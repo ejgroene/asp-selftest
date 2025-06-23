@@ -18,7 +18,7 @@ def clingo_main_plugin(next, arguments=(), **etc):
         def main(self, control, files):
             """ As required by clingo_main. It must not raise. """
             try:
-                self._logger, _main = next(control=control, files=files, **etc)  # [3]
+                self._logger, _main = next(control=control, files=files, arguments=arguments, **etc)  # [3]
                 return _main()
             except Exception as e:
                 self.exception = e
@@ -67,6 +67,8 @@ UNKNOWN""")
 def plugin_basic_noop(stdout):
     arguments = []
     def next(*args, **etc):
+        # !! we test only the plugin; hance we have no 'next' as first argument
+        #    when called with session(), we have the next plugin as 'next'.
         arguments.append(args)
         arguments.append(etc)
         return None, next
@@ -81,7 +83,8 @@ def plugin_basic_noop(stdout):
     test.isinstance(plugin_kwargs['control'], clingo.Control)
     test.eq([], plugin_kwargs['files'])
     test.eq('42', plugin_kwargs['etc'])
-    test.eq(3, len(plugin_kwargs))
+    test.eq([], plugin_kwargs['arguments'])
+    test.eq(4, len(plugin_kwargs))
     main_args = arguments[2:4]
     test.eq([(), {}], main_args)
 
@@ -108,7 +111,7 @@ def pass_arguments_to_files(tmp_path, stdout):
 @test
 def forward_logger(stdout):
     trace = []
-    def next(control=None, files=()):
+    def next(control=None, files=(), arguments=()):
         def next_main():
             control.add("error")  # trigger call of logger
         def logger(code, message):
@@ -118,3 +121,16 @@ def forward_logger(stdout):
     with test.raises(RuntimeError, "parsing failed"):
         main()
     test.eq('<block>:2:1-2: error: syntax error, unexpected EOF\n', trace[0])
+
+
+@test
+def pass_arguments_to_next_plugin(stdout):
+    trace = []
+    def next_plugin(control=None, files=(), arguments=()):
+        trace[:] = arguments
+        return 1, lambda: None
+    main = clingo_main_plugin(next_plugin, arguments=['--project=no'])
+    test.eq([], trace)
+    exitcode = main()
+    test.eq(0, exitcode)
+    test.eq(['--project=no'], trace)
