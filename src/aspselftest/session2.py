@@ -26,12 +26,9 @@ from .plugins import (
     clingo_control_plugin,
     clingo_syntaxerror_plugin,
     clingo_sequencer_plugin,
-)
-
-
-from .plugins._testplugins import (
     clingo_defaults_plugin,
 )
+
 
 test = selftest.get_tester(__name__)
 
