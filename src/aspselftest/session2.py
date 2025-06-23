@@ -25,11 +25,11 @@ from .plugins import (
     source_plugin,
     clingo_control_plugin,
     clingo_syntaxerror_plugin,
+    clingo_sequencer_plugin,
 )
 
 
 from .plugins._testplugins import (
-    clingo_sequencer_plugin,
     clingo_defaults_plugin,
 )
 
