@@ -19,13 +19,16 @@ def testrunner_plugin(next, **etc):
     def _filter_program(ast):
         if program := is_testprogram(ast):
             name, dependencies, filename, lineno = program
-            _tests.setdefault(filename, []).append(program)
+            tests = _tests.setdefault(filename, {})
+            if name in tests:
+                raise AssertionError(f"Duplicate test: {name!r} in {filename}.")
+            tests[name] = (dependencies, lineno)
 
     def load(maincontrol, files):
         clingo.ast.parse_files(files, callback=_filter_program, logger=logger)
         for filename, tests in _tests.items():
             print("Testing", filename)
-            for testname, dependencies, _, lineno in tests:
+            for testname, (dependencies, lineno) in tests.items():
                 fulltestname = f"{testname}({', '.join(dependencies)})"
                 parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
                 print(" ", fulltestname, end='', flush=True)
@@ -42,6 +45,7 @@ def testrunner_plugin(next, **etc):
                             e.add_note(f"File {filename}, line {lineno}, in {fulltestname}.")
                             print()
                             raise e
+                print()
         _load(maincontrol, files)
     return logger, load, ground, solve
 
@@ -62,37 +66,74 @@ def simple_clingo_plugin():
     return None, load, ground, solve
 
 @test
-def testrunner_plugin_basics(tmp_path):
+def testrunner_plugin_basics(tmp_path, stdout):
     testfile = write_file(tmp_path/'testfile.lp', """\
-        a.
         #program test_a.
-        cannot(a).
+        cannot("I fail").
     """)
 
     _0, load, ground, solve = testrunner_plugin(simple_clingo_plugin)
 
     main_control = clingo.Control()
-    with test.raises(AssertionError, "cannot(a)") as e:
+    with test.raises(AssertionError, 'cannot("I fail")') as e:
         load(main_control, files=(testfile,))
-    test.eq(e.exception.__notes__[0], f"File {testfile}, line 2, in test_a().")
+    test.eq(e.exception.__notes__[0], f"File {testfile}, line 1, in test_a().")
+    test.eq(stdout.getvalue(), f"Testing {testfile}\n  test_a()\n")
 
 
 @test
-def testrunner_plugin_no_failures(tmp_path):
+def testrunner_plugin_no_failures(tmp_path, stdout):
     testfile = write_file(tmp_path/'testfile.lp', """\
-        #external a.
-        #program test_a.
-        cannot(a) :- a.
+        a.
+        #program test_a(base).
+        cannot(a) :- not a.
     """)
 
-    _0, load, ground, solve = testrunner_plugin(simple_clingo_plugin)
+    _, load, ground, solve = testrunner_plugin(simple_clingo_plugin)
 
     main_control = clingo.Control()
     load(main_control, files=(testfile,))
+    test.eq(stdout.getvalue(), f"Testing {testfile}\n  test_a(base)\n")
+
     ground(main_control, (('base', ()), ('test_a', ())))
-    solve(main_control, False)
-    # NB: both symbols below are in the symbol table, but both false
     test.eq('a', str(next(main_control.symbolic_atoms.by_signature('a', 0)).symbol))
-    test.eq('cannot(a)', str(next(main_control.symbolic_atoms.by_signature('cannot', 1)).symbol))
 
 
+@test
+def run_tests_per_included_file_separately(tmp_path, stdout):
+    part_a = write_file(tmp_path/'part_a.lp',
+        f'#program test_a.')
+    part_b = write_file(tmp_path/'part_b.lp',
+        f'#include "{part_a}".  #program test_b.')
+    part_c = write_file(tmp_path/'part_c.lp',
+        f'#include "{part_b}".  #include "{part_a}".  #program test_c.')
+
+    _, load, ground, solve = testrunner_plugin(simple_clingo_plugin)
+    main_control = clingo.Control()
+    load(main_control, files=(part_c,))
+    out = stdout.getvalue()
+    test.contains(out, f"""\
+Testing {part_a}
+  test_a()
+Testing {part_b}
+  test_b()
+Testing {part_c}
+  test_c()""")
+
+
+# TEST taken from runasptests.py
+
+
+def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
+    with test.tmp_path as p:
+        inputfile = write_file(p/'inputfile.lp', asp_code)
+        _, load, ground, _ = testrunner_plugin(simple_clingo_plugin)
+        main_control = clingo.Control()
+        load(main_control, files=(inputfile,))
+    
+
+@test
+def check_for_duplicate_test():
+    with test.raises(Exception) as e:
+        parse_and_run_tests(""" #program test_a. \n #program test_a. """)
+    test.startswith(str(e.exception), "Duplicate test: 'test_a' in ")
