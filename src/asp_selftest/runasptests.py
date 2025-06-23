@@ -9,7 +9,7 @@ import tempfile
 from clingo import Function, Number
 
 from .tester import TesterHook
-from .syntaxerrorhandler import AspSyntaxError, ground_exc
+from .syntaxerrorhandler import ground_exc
 
 
 import selftest

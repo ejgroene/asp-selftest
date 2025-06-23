@@ -19,6 +19,7 @@ import tempfile
 import selftest
 
 from .plugins.clingoexitcodes import ExitCode
+from .plugins.misc import write_file
 
 from .plugins import (
     clingo_main_plugin,
@@ -102,24 +103,35 @@ def clingo_session(**kwargs):
 
 
 @test
-def clingo_main_session_happy_flow(tmp_path):
+def clingo_main_session_happy_flow(stdout, tmp_path):
     file1 = tmp_path/'file1.lp'
     file1.write_text('a.')
     exitcode = clingo_main_session(arguments=(file1.as_posix(),))
     test.eq(exitcode, ExitCode.SAT)
+    out = stdout.getvalue()
+    test.startswith(out, "clingo version 5.7.1\nReading from ...")
+    test.contains(out, "Answer: 1\na\nSATISFIABLE\n\nModels       : 1+\n")
+    test.endswith(out, "CPU Time     : 0.000s\n")
+
 
 @test
-def clingo_main_session_error(tmp_path):
-    file1 = tmp_path/'error.lp'
-    file1.write_text('error')
+def clingo_main_session_error(stdout, stderr, tmp_path):
+    file1 = write_file(tmp_path/'error.lp', 'error')
     with test.raises(SyntaxError):
-        clingo_main_session(arguments=(file1.as_posix(),))
+        clingo_main_session(arguments=(file1,))
+    err = stderr.getvalue()
+    test.startswith(err, "UNHANDLED MESSAGE: code=MessageCode.RuntimeError, message: '")
+    test.contains(err, file1)
+    test.endswith(err, "error.lp:2:1-2: error: syntax error, unexpected EOF\\n'\n")
+
 
 @test
-def session_with_source():
+def session_with_source(stderr):
     with test.raises(SyntaxError) as e:
         clingo_session(source="error", label='yellow')
-    test.endswith(str(e.exception), f"-yellow.lp:2:1-2: error: syntax error, unexpected EOF\n")
+    msg = str(e.exception)
+    test.startswith(msg, "syntax error, unexpected EOF (tmp")
+    test.endswith(msg, f"-yellow.lp, line 2)")
 
 
 @test
