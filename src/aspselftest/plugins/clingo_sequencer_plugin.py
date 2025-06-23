@@ -28,6 +28,9 @@ def clingo_sequencer_plugin(
     return logger, main
 
 
+# TODO: MOVE control TO ARGUMENTS of LOAD/GROUND/SOLVE
+
+
 @test
 def sequencer_plugin_basics(tmp_path):
 
