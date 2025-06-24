@@ -205,21 +205,6 @@ def is_generated_base(a):
 
 import clingo
 @test
-def we_CAN_NOT_i_repeat_NOT_reuse_control():
-    c = clingo.Control()
-    c.add("a. #program p1. p(1). #program p2. p(2).")
-    c.ground()
-    test.eq(['a'], [str(s.symbol) for s in c.symbolic_atoms])
-    c.cleanup()
-    c.ground((('base', ()), ('p1', ())))
-    test.eq(['a', 'p(1)'], [str(s.symbol) for s in c.symbolic_atoms])
-    c.cleanup()
-    c.ground((('base', ()), ('p2', ())))
-    # p(1) should be gone
-    test.eq(['a', 'p(1)', 'p(2)'], [str(s.symbol) for s in c.symbolic_atoms])
-
-
-@test
 def report_not_for_base_model_count():
     t = Tester('filea.lp', 'harry')
     with test.raises(Exception, 'filea.lp #program harry: no models found.'):

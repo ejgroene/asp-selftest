@@ -151,7 +151,7 @@ Testing {part_c}
 def parse_and_run_tests(asp_code, trace=lambda _:None, **etc):
     with test.tmp_path as p:
         inputfile = write_file(p/'inputfile.lp', asp_code)
-        _, load, ground, _ = testrunner_plugin(
+        _, load, _, _ = testrunner_plugin(
             tracing_clingo_plugin(trace=trace), **etc)
         main_control = clingo.Control()
         load(main_control, files=(inputfile,))
@@ -263,3 +263,38 @@ def format_model_wide(stderr, stdout):
     test.eq(notes[1], """Model:
 this_is_a_fact(1)  this_is_a_fact(2)
 this_is_a_fact(3)""")
+
+
+@test
+def we_CAN_NOT_i_repeat_NOT_reuse_control():
+    c = clingo.Control()
+    c.add("a. #program p1. p(1). #program p2. p(2).")
+    c.ground()
+    test.eq(['a'], [str(s.symbol) for s in c.symbolic_atoms])
+    c.cleanup()
+    c.ground((('base', ()), ('p1', ())))
+    test.eq(['a', 'p(1)'], [str(s.symbol) for s in c.symbolic_atoms])
+    c.cleanup()
+    c.ground((('base', ()), ('p2', ())))
+    # p(1) should be gone
+    test.eq(['a', 'p(1)', 'p(2)'], [str(s.symbol) for s in c.symbolic_atoms])
+
+
+@test
+def dependencies(stderr, stdout):
+    parse_and_run_tests("""
+        base_fact.
+
+        #program one().
+        one_fact.
+
+        #program test_base(base).
+        cannot(base_fact) :- not base_fact.
+
+        #program test_one(base, one).
+        cannot(base_fact) :- not base_fact.
+        cannot(one_fact) :- not one_fact.
+    """)
+    test.eq('', stderr.getvalue())
+    test.endswith(stdout.getvalue(),
+      "/inputfile.lp\n  base()\n  test_base(base)\n  test_one(base, one)\n")

@@ -47,33 +47,6 @@ def simple_program(stderr):
     test.eq({'testname': 'test_fact', 'models': 1}, data)
 
 
-@test
-def dependencies(stderr):
-    t = parse_and_run_tests("""
-        base_fact.
-
-        #program one().
-        one_fact.
-
-        #program test_base(base).
-        cannot("base_facts") :- not base_fact.
-        models(1).
-
-        #program test_one(base, one).
-        cannot("one includes base") :- base_fact, not one_fact.
-        models(1).
-     """)
-    #data = next(t)
-    #test.endswith(data.pop('filename'), '<string>')
-    #test.eq({'testname': 'base', 'asserts': set(), 'models': 1}, data)
-    data = next(t)
-    test.endswith(data.pop('filename'), '<string>')
-    test.eq({'testname': 'test_base', 'models': 1}, data)
-    data = next(t)
-    test.endswith(data.pop('filename'), '<string>')
-    test.eq({'testname': 'test_one' , 'models': 1}, data)
-
-
 #@test   # passing parameters to programs is no longer supported
 def pass_constant_values(stderr):
     t = parse_and_run_tests("""
