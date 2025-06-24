@@ -1,69 +1,90 @@
 import sys
+import collections
 import clingo.ast
 
 import selftest
 test =  selftest.get_tester(__name__)
 
-from .misc import Noop, NA, write_file
+from .misc import Noop, NA, write_file, format_symbols
 from ..session import clingo_session_base
 
 
+def is_testprogram(a):
+    if a.ast_type == clingo.ast.ASTType.Program:
+        if a.name.startswith('test_'):
+            return a.name, [p.name for p in a.parameters]
 
-def testrunner_plugin(next, **etc):
-    """ Runs all tests in every file separately, during loading. """
 
-    logger, _load, ground, solve = next(**etc)
-
-    _tests = {}
+def gather_tests(files, logger):
+    all_tests = collections.defaultdict(dict)
 
     def _filter_program(ast):
+        filename = ast.location.begin.filename
+        tests = all_tests[filename]
         if program := is_testprogram(ast):
-            name, dependencies, filename, lineno = program
-            tests = _tests.setdefault(filename, {})
+            name, dependencies = program
             if name in tests:
                 raise AssertionError(f"Duplicate test: {name!r} in {filename}.")
-            tests[name] = (dependencies, lineno)
+            tests[name] = (dependencies, ast.location.begin.line)
 
-    def load(maincontrol, files):
-        clingo.ast.parse_files(files, callback=_filter_program, logger=logger)
-        for filename, tests in _tests.items():
+    clingo.ast.parse_files(files, callback=_filter_program, logger=logger)
+    return reversed(all_tests.items())
+
+
+def testrunner_plugin(next, arguments=(), context=None, **etc):
+    """ Runs all tests in every file separately, during loading. """
+
+    logger, _load, ground, solve = next(
+        arguments=arguments,
+        context=context,
+        **etc) # pass arguments and context!
+
+    def load(control, files):
+        for filename, tests in gather_tests(files, logger):
             print("Testing", filename)
-            for testname, (dependencies, lineno) in tests.items():
+            tests_per_file = [('base', ((), 1)), *tests.items()]
+            for testname, (dependencies, lineno) in tests_per_file:
                 fulltestname = f"{testname}({', '.join(dependencies)})"
                 parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
                 print(" ", fulltestname, end='', flush=True)
 
-                sublogger, subload, subground, subsolve = next(**etc)
-                subcontrol = clingo.Control(logger=sublogger)
-                subload(subcontrol, files=(filename,))
-                subground(subcontrol, parts=parts)
+                sub_logger, sub_load, sub_ground, sub_solve = next(**etc)
+                sub_control = clingo.Control(
+                    arguments=arguments,
+                    logger=sub_logger)
+                sub_load(sub_control, files=(filename,))
+                sub_ground(sub_control, parts=parts, context=context)
 
-                with subsolve(subcontrol, yield_=True) as models:
+                with sub_solve(sub_control, yield_=True) as models:
                     for model in models:
                         if failures := list(model.context.symbolic_atoms.by_signature('cannot', 1)):
                             e = AssertionError(', '.join(str(f.symbol) for f in failures))
                             e.add_note(f"File {filename}, line {lineno}, in {fulltestname}.")
+                            e.add_note("Model:\n" + format_symbols(s for s in model.symbols(shown=True) if s.name != 'cannot'))
                             print()
                             raise e
                 print()
-        _load(maincontrol, files)
+
+        _load(control, files)
+
     return logger, load, ground, solve
 
 
-def is_testprogram(a):
-    if a.ast_type == clingo.ast.ASTType.Program and a.name.startswith('test_'):
-        loc = a.location.begin
-        return a.name, [p.name for p in a.parameters], loc.filename, loc.line
+def tracing_clingo_plugin(trace=lambda x: None):
+    def tracer(**etc):
+        trace(etc)
+        def load(control, files):
+            trace((control, files))
+            control.load(files[0])
+        def ground(control, parts, context=None):
+            trace((control, parts, context))
+            control.ground(parts=parts, context=context)
+        def solve(control, yield_):
+            trace(yield_)
+            return control.solve(yield_=yield_)
+        return None, load, ground, solve
+    return tracer
 
-
-def simple_clingo_plugin():
-    def load(control, files):
-        control.load(files[0])
-    def ground(control, parts):
-        control.ground(parts=parts)
-    def solve(control, yield_):
-        return control.solve(yield_=yield_)
-    return None, load, ground, solve
 
 @test
 def testrunner_plugin_basics(tmp_path, stdout):
@@ -72,13 +93,13 @@ def testrunner_plugin_basics(tmp_path, stdout):
         cannot("I fail").
     """)
 
-    _0, load, ground, solve = testrunner_plugin(simple_clingo_plugin)
+    _0, load, ground, solve = testrunner_plugin(tracing_clingo_plugin())
 
     main_control = clingo.Control()
     with test.raises(AssertionError, 'cannot("I fail")') as e:
         load(main_control, files=(testfile,))
     test.eq(e.exception.__notes__[0], f"File {testfile}, line 1, in test_a().")
-    test.eq(stdout.getvalue(), f"Testing {testfile}\n  test_a()\n")
+    test.eq(stdout.getvalue(), f"Testing {testfile}\n  base()\n  test_a()\n")
 
 
 @test
@@ -89,13 +110,13 @@ def testrunner_plugin_no_failures(tmp_path, stdout):
         cannot(a) :- not a.
     """)
 
-    _, load, ground, solve = testrunner_plugin(simple_clingo_plugin)
+    _, load, ground, solve = testrunner_plugin(tracing_clingo_plugin())
 
     main_control = clingo.Control()
     load(main_control, files=(testfile,))
-    test.eq(stdout.getvalue(), f"Testing {testfile}\n  test_a(base)\n")
+    test.eq(stdout.getvalue(), f"Testing {testfile}\n  base()\n  test_a(base)\n")
 
-    ground(main_control, (('base', ()), ('test_a', ())))
+    ground(main_control, parts=(('base', ()), ('test_a', ())))
     test.eq('a', str(next(main_control.symbolic_atoms.by_signature('a', 0)).symbol))
 
 
@@ -108,32 +129,137 @@ def run_tests_per_included_file_separately(tmp_path, stdout):
     part_c = write_file(tmp_path/'part_c.lp',
         f'#include "{part_b}".  #include "{part_a}".  #program test_c.')
 
-    _, load, ground, solve = testrunner_plugin(simple_clingo_plugin)
+    _, load, ground, solve = testrunner_plugin(tracing_clingo_plugin())
     main_control = clingo.Control()
     load(main_control, files=(part_c,))
     out = stdout.getvalue()
     test.contains(out, f"""\
-Testing {part_a}
-  test_a()
 Testing {part_b}
+  base()
   test_b()
+Testing {part_a}
+  base()
+  test_a()
 Testing {part_c}
+  base()
   test_c()""")
 
 
 # TEST taken from runasptests.py
 
 
-def parse_and_run_tests(asp_code, base_programs=(), hooks=()):
+def parse_and_run_tests(asp_code, trace=lambda _:None, **etc):
     with test.tmp_path as p:
         inputfile = write_file(p/'inputfile.lp', asp_code)
-        _, load, ground, _ = testrunner_plugin(simple_clingo_plugin)
+        _, load, ground, _ = testrunner_plugin(
+            tracing_clingo_plugin(trace=trace), **etc)
         main_control = clingo.Control()
         load(main_control, files=(inputfile,))
     
 
 @test
+def cannot_in_base():
+    with test.raises(AssertionError, 'cannot(fail)'):
+        parse_and_run_tests("cannot(fail).")  # constraints in base
+    
+
+@test
+def use_arguments_for_testing():
+    trace = []
+    asp_program = "sum(a). cannot(a) :- not sum(42)."
+    parse_and_run_tests(
+        asp_program,
+        arguments=['--const', 'a=42'],
+        trace=trace.append)
+    test.eq({'arguments': ['--const', 'a=42'], 'context': None}, trace[0])
+    with test.raises(AssertionError, "cannot(99)"):
+        parse_and_run_tests(
+            asp_program,
+            arguments=['--const', 'a=99'])
+
+
+
+@test
+def use_context_when_running_tests():
+    trace = []
+    asp_program = "#program test_a_42. a(42). cannot(@a()) :- a(@a())."
+    n = 43
+    class MyContext:
+        def a(self):
+            return clingo.Number(n)
+    mycontext = MyContext()
+    parse_and_run_tests(
+        asp_program,
+        context=mycontext,
+        trace=trace.append)
+    test.eq(mycontext, trace[0]['context'])
+    n = 42
+    with test.raises(AssertionError, "cannot(42)"):
+        parse_and_run_tests(
+            asp_program,
+            context=MyContext())
+    
+        
+@test
 def check_for_duplicate_test():
     with test.raises(Exception) as e:
         parse_and_run_tests(""" #program test_a. \n #program test_a. """)
     test.startswith(str(e.exception), "Duplicate test: 'test_a' in ")
+
+
+@test
+def format_empty_model(stderr, stdout):
+    with test.raises(AssertionError) as e:
+        parse_and_run_tests("""
+            #program test_model_formatting.
+            #external what.
+            cannot(test) :- not what.
+        """)
+    msg = str(e.exception)
+    #test.eq(msg, f"""MODEL:
+    #<empty>
+    #Failures in <string>, #program test_model_formatting():
+    #cannot(test)
+    #""")
+    notes = e.exception.__notes__
+    test.startswith(notes[0], "File ")
+    test.endswith(notes[0], ", line 2, in test_model_formatting().")
+    test.eq(notes[1], "Model:\n<empty>")
+
+
+@test
+def format_model_small(stderr, stdout):
+    import unittest.mock as mock
+    with mock.patch("shutil.get_terminal_size", lambda _: (37,20)):
+        with test.raises(AssertionError) as e:
+            parse_and_run_tests("""
+                #program test_model_formatting.
+                this_is_a_fact(1..2).
+                #external what.
+                cannot(test) :- not what.
+            """)
+    notes = e.exception.__notes__
+    test.startswith(notes[0], "File ")
+    test.endswith(notes[0], ", line 2, in test_model_formatting().")
+    test.eq(notes[1], """Model:
+this_is_a_fact(1)
+this_is_a_fact(2)""")
+
+
+@test
+def format_model_wide(stderr, stdout):
+    import unittest.mock as mock
+    with mock.patch("shutil.get_terminal_size", lambda _: (50,20)):
+        with test.raises(AssertionError) as e:
+            parse_and_run_tests("""
+                #program test_model_formatting.
+                this_is_a_fact(1..3).
+                #external what.
+                cannot(test) :- not what.
+            """)
+    notes = e.exception.__notes__
+    test.startswith(notes[0], "File ")
+    test.endswith(notes[0], ", line 2, in test_model_formatting().")
+    test.eq(notes[1], """Model:
+this_is_a_fact(1)  this_is_a_fact(2)
+this_is_a_fact(3)""")
