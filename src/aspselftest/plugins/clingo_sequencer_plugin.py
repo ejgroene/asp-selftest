@@ -10,6 +10,7 @@ test = selftest.get_tester(__name__)
 
 def clingo_sequencer_plugin(
         next,
+        control=None,
         files=(),
         parts=(('base', ()),),
         context=None,
@@ -21,9 +22,9 @@ def clingo_sequencer_plugin(
     logger, load, ground, solve = next(**etc)
             
     def main():
-        load(files=files)
-        ground(parts=parts, context=context)
-        return solve(on_model=on_model, yield_=yield_)
+        load(control, files=files)
+        ground(control, parts=parts, context=context)
+        return solve(control, on_model=on_model, yield_=yield_)
             
     return logger, main
 
@@ -39,12 +40,12 @@ def sequencer_plugin_basics(tmp_path):
 
     def next_plugin(logger=None, **etc):
         trace.append(etc)
-        def load(files=()):
+        def load(control, files=()):
             trace.append(files)
-        def ground(parts=(('base', ()),), context=None):
+        def ground(control, parts=(('base', ()),), context=None):
             trace.append(parts)
             trace.append(context)
-        def solve(on_model=None, yield_=False):
+        def solve(control, on_model=None, yield_=False):
             # many more, see https://potassco.org/clingo/python-api/current/clingo/control.html#clingo.control.Control.solve
             trace.append(on_model)
             trace.append(yield_)
@@ -91,12 +92,12 @@ def test_defaults():
         
     def next_plugin(logger=None, **etc):
         trace.append(etc)
-        def load(files='-'):
+        def load(control, files='-'):
             trace.append(files)
-        def ground(parts='-', context='-'):
+        def ground(control, parts='-', context='-'):
             trace.append(parts)
             trace.append(context)
-        def solve(on_model='-', yield_='-'):
+        def solve(control, on_model='-', yield_='-'):
             trace.append(on_model)
             trace.append(yield_)
         return logger, load, ground, solve
