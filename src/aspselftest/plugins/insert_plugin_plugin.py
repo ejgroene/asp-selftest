@@ -128,3 +128,6 @@ def use_proper_logger(tmp_path):
     with test.raises(RuntimeError, "syntax error"):
         load(None, (f,))
     test.eq((1, f"{f}:1:15-20: error: syntax error, unexpected <IDENTIFIER>\n"), trace[0])
+
+
+#TODO test error conditions (maybe if you really start using this idea)
