@@ -77,3 +77,24 @@ def format_symbols_basic():
     with mock.patch("shutil.get_terminal_size", lambda _: (4,20)):
         test.eq('a\nb\nc\nd', format_symbols(['a', 'b', 'c', 'd']))
 
+
+def is_plugin_instruction(p, givenname='insert_plugin'):
+    """ check if p is a processor(<classname>) and return <classname> """
+    if p.ast_type == clingo.ast.ASTType.Rule:
+        p = p.head
+        if p.ast_type == clingo.ast.ASTType.Literal:
+            p = p.atom
+            if p.ast_type == clingo.ast.ASTType.SymbolicAtom:
+                p = p.symbol
+                if p.ast_type == clingo.ast.ASTType.Function:
+                    name, args = p.name, p.arguments
+                    if name == givenname:
+                        p = args[0]
+                        if p.ast_type == clingo.ast.ASTType.SymbolicTerm:
+                            p = p.symbol
+                            if p.type == clingo.symbol.SymbolType.String:
+                                p = p.string
+                                if isinstance(p, str):
+                                    return p
+
+
