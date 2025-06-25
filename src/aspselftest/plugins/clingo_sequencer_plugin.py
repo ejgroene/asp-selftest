@@ -19,7 +19,7 @@ def clingo_sequencer_plugin(
         **etc):
     """ Breaks down main into Clingo-specific steps. """
     
-    logger, load, ground, solve = next(**etc)
+    logger, load, ground, solve = next(parts=parts, **etc)
             
     def main():
         load(control, files=files)
@@ -77,7 +77,7 @@ def sequencer_plugin_basics(tmp_path):
 
     main()
 
-    test.eq({'more': 'better'}, trace[0])
+    test.eq({'parts': (('part_a', ()), ('part_b', ())), 'more': 'better'}, trace[0])
     test.eq((file1,), trace[1])
     test.eq((('part_a', ()), ('part_b', ())), trace[2])
     test.isinstance(trace[3], MyContext)
@@ -107,7 +107,7 @@ def test_defaults():
 
     main()
 
-    test.eq({}, trace[0])
+    test.eq({'parts': (('base', ()),)}, trace[0])
     test.eq((), trace[1])
     test.eq((('base', ()),), trace[2])
     test.eq(None, trace[3])

@@ -6,3 +6,4 @@ from .clingo_syntaxerror_plugin import clingo_syntaxerror_plugin
 from .clingo_sequencer_plugin import clingo_sequencer_plugin
 from .clingo_defaults_plugin import clingo_defaults_plugin
 from .testrunner_plugin import testrunner_plugin
+from .clingo_reify_plugin import clingo_reify_plugin

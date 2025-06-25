@@ -20,13 +20,9 @@ def clingo_syntaxerror_plugin(next, msg2exc=msg2exc, **etc):
     exception = []
 
     def logger(code, message):
-        try:
-            _logger(code, message)
-            print(">>>>>>>>>>>>>>>>", code, message)
-            rich_exception = msg2exc(code, message)
-            exception.append(rich_exception)
-        except Exception as e:
-            print("EXCEPTION", a)
+        _logger(code, message)
+        rich_exception = msg2exc(code, message)
+        exception.append(rich_exception)
 
     def main():
         try:
@@ -38,6 +34,7 @@ def clingo_syntaxerror_plugin(next, msg2exc=msg2exc, **etc):
         return result
             
     return logger, main
+
 
 @test
 def syntaxerror_basics():
