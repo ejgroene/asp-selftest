@@ -1,5 +1,11 @@
 # asp-selftest
 
+June 25, 2025:
+
+NB: I am replacing the main branch with the simple plugins branch. The main branch is broken temporarily.
+
+
+
 **In-source** test runner for _Answer Set Programming_ (`ASP`) with [Clingo](https://potassco.org).
 
 It allows one to write **constraints** in ASP that will automatically be checked on loading. Consider `logic.lp` which contains:
