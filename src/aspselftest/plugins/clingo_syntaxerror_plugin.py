@@ -17,20 +17,23 @@ def clingo_syntaxerror_plugin(next, msg2exc=msg2exc, **etc):
 
     _logger, _main = next(**etc)
 
-    exception = []
+    exceptions = []
 
     def logger(code, message):
         _logger(code, message)
         rich_exception = msg2exc(code, message)
-        exception.append(rich_exception)
+        exceptions.append(rich_exception)
 
     def main():
         try:
             result = _main() # expect Clingo to call logger on error
         except RuntimeError as e:
-            raise exception.pop(0)
-        if exception:
-            raise exception.pop(0)
+            if not exceptions:
+                raise e
+        if exceptions:
+            for e in exceptions[1:]:
+                exceptions[0].add_note(f"followed by: {e}")
+            raise exceptions[0]
         return result
             
     return logger, main
@@ -150,6 +153,8 @@ def parse_warning_raise_error(tmp_path):
         test.eq("""    1 a(1). sum(X) :- X = #sum { X : a(A) }.
                                  ^ global variable in tuple of aggregate element:  X""",
                 e.exception.text)
+        test.eq(['followed by: unsafe variables in:  sum(X):-[#inc_base];X=#sum{X:a(A)}. (test, line 1)'],
+            e.exception.__notes__)
         #test.startswith(
         #        out.getvalue(),
         #        "  WARNING ALREADY exception: global variable in tuple of aggregate element:  X (test, line 1)")
@@ -221,3 +226,29 @@ def error_in_file(tmp_path):
         test.endswith(e.exception.text, """
     1 oops(().
              ^ syntax error, unexpected ., expecting ) or ;""")
+
+
+@test
+def do_not_mask_other_exceptions(stdout):
+
+    def next_plugin():
+        def main():
+            raise Exception("do not mask me")
+        return None, main
+       
+    _, main = clingo_syntaxerror_plugin(next_plugin)
+    with test.raises(Exception, "do not mask me"):
+        main()
+
+
+@test
+def detect_runtimerror_without_logged_error(stdout):
+
+    def next_plugin():
+        def main():
+            raise RuntimeError("no logger called")
+        return None, main
+
+    _, main = clingo_syntaxerror_plugin(next_plugin)
+    with test.raises(RuntimeError, "no logger called"):
+        main()

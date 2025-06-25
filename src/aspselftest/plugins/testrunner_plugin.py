@@ -5,8 +5,7 @@ import clingo.ast
 import selftest
 test =  selftest.get_tester(__name__)
 
-from .misc import Noop, NA, write_file, format_symbols
-from ..session import clingo_session_base
+from .misc import NA, write_file, format_symbols
 
 
 def is_testprogram(a):
@@ -43,6 +42,7 @@ def testrunner_plugin(next, arguments=(), context=None, **etc):
         for filename, tests in gather_tests(files, logger):
             print("Testing", filename)
             tests_per_file = [('base', ((), 1)), *tests.items()]
+                        
             for testname, (dependencies, lineno) in tests_per_file:
                 fulltestname = f"{testname}({', '.join(dependencies)})"
                 parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]

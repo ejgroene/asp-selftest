@@ -18,8 +18,7 @@ import tempfile
 
 import selftest
 
-from .plugins.clingoexitcodes import ExitCode
-from .plugins.misc import write_file
+from .plugins.misc import write_file, ExitCode
 
 from .plugins import (
     clingo_main_plugin,

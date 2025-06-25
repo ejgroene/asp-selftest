@@ -1,6 +1,5 @@
 import clingo
-from .clingoexitcodes import ExitCode
-from .misc import write_file
+from .misc import write_file, ExitCode
 
 import selftest
 test = selftest.get_tester(__name__)
