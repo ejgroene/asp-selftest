@@ -252,3 +252,23 @@ def detect_runtimerror_without_logged_error(stdout):
     _, main = clingo_syntaxerror_plugin(next_plugin)
     with test.raises(RuntimeError, "no logger called"):
         main()
+
+
+@test
+def raise_exception_in_context():
+
+    class Context:
+        def f(self):
+            1/0
+
+    def next_plugin():
+        def main():
+            control.add("a(@f()).")
+            control.ground(context=Context())
+        return lambda c, m: None, main
+
+    logger, main = clingo_syntaxerror_plugin(next_plugin)
+    control = clingo.Control(logger=logger)
+    with test.raises(ZeroDivisionError, "division by zero"):
+        main()
+

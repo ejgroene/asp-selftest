@@ -108,7 +108,7 @@ def clingo_main_session_happy_flow(stdout, tmp_path):
     exitcode = clingo_main_session(arguments=(file1.as_posix(),))
     test.eq(exitcode, ExitCode.SAT)
     out = stdout.getvalue()
-    test.startswith(out, "clingo version 5.7.1\nReading from ...")
+    test.startswith(out, "clingo+ version 5.7.1\nReading from ...")
     test.contains(out, "Answer: 1\na\nSATISFIABLE\n\nModels       : 1+\n")
     test.endswith(out, "CPU Time     : 0.000s\n")
 

@@ -158,3 +158,4 @@ a(@a()). b(@b()). c(@c()).
         for m in h:
             test.eq("a b c d", str(m))
 
+

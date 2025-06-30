@@ -12,6 +12,7 @@ def clingo_main_plugin(next, arguments=(), **etc):
             
     class App:
         """ As per Clingo spec: callbacks main() and logger(). """
+        program_name = 'clingo+'
         exceptions = []
                 
         def main(self, control, files):
@@ -40,13 +41,22 @@ def clingo_main_plugin(next, arguments=(), **etc):
 
 
 @test
+def clingo_thingies(stdout):
+    def next_plugin():
+        return None, lambda: None
+    clingo_main_plugin(next_plugin, arguments=["--help"])()
+    out = stdout.getvalue()
+    test.startswith(out, "clingo+ version 5.7.1\nusage: clingo+ [number] [options] [files]\n\n")
+
+
+@test
 def raise_errors_in_plugins(stdout):
     def malicious_plugin(**etc):
         return 1, 2, 3
     main = clingo_main_plugin(malicious_plugin, arguments=[])
     with test.raises(ValueError, "too many values to unpack (expected 2)"):
         main()
-    test.startswith(stdout.getvalue(), """clingo version 5.7.1
+    test.startswith(stdout.getvalue(), """clingo+ version 5.7.1
 Reading from stdin
 UNKNOWN""")
 
@@ -60,7 +70,7 @@ def raise_errors_in_main(stdout):
     main = clingo_main_plugin(malicious_plugin, arguments=[])
     with test.raises(ZeroDivisionError, "division by zero"):
         main()
-    test.startswith(stdout.getvalue(), """clingo version 5.7.1
+    test.startswith(stdout.getvalue(), """clingo+ version 5.7.1
 Reading from stdin
 UNKNOWN""")
 
