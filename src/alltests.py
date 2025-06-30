@@ -8,6 +8,7 @@ coverage.start()
 import aspselftest.plugins.clingo_main_plugin
 
 import aspselftest.session2
+import aspselftest.integration
 
 #import asp_selftest.arguments_tests
 #import asp_selftest.utils

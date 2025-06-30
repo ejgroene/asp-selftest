@@ -1,4 +1,5 @@
 
+import sys
 import clingo
 
 import selftest

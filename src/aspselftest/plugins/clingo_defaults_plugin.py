@@ -22,7 +22,9 @@ def clingo_defaults_plugin(next, **etc):
         control.ground(**kw)
 
     def solve(control, **kw):
-        return control.solve(**kw)
+        result = control.solve(**kw)
+        result.__control = control # save control from GC. Clingo C++ API does not maintain a relation.
+        return result
                     
     return logger, load, ground, solve
     
@@ -47,6 +49,14 @@ def clingo_defaults_plugin_logger(stderr):
     logger, l, g, s = clingo_defaults_plugin(None)
     logger(67, 'message in a bottle')
     test.eq(stderr.getvalue(), "UNHANDLED MESSAGE: code=67, message: 'message in a bottle'\n")
+
+
+@test
+def keep_control_from_GC():
+    _, l, g, s = clingo_defaults_plugin(None)
+    control = clingo.Control()
+    result = s(control)
+    test.eq(control, result.__control)
 
 
 @test

@@ -37,12 +37,12 @@ def session2(plugins=(), **etc):
     """ Calls each plugin (factory) with the next one as first argument, followed by **etc.
         The first plugin must return a callable wich is called immediately. """
     assert len(plugins) > 0, plugins
-    def next_plugin_func(i):
-        def next_plugin(**etc):
+    def get_plugin_func(i):
+        def get_plugin(**etc):
             assert i < len(plugins), f"No more plugins after '{plugins[-1].__name__}'"
-            return plugins[i](next_plugin_func(i+1), **etc)
-        return next_plugin
-    return next_plugin_func(0)(**etc)()
+            return plugins[i](get_plugin_func(i+1), **etc)
+        return get_plugin
+    return get_plugin_func(0)(**etc)()
 
 
 @test
