@@ -23,7 +23,10 @@ def clingo_defaults_plugin(next, **etc):
 
     def solve(control, **kw):
         result = control.solve(**kw)
-        result.__control = control # save control from GC. Clingo C++ API does not maintain a relation.
+        # Clingo Python/C++ API does not maintain a relation between a Handle and its Control.
+        # As soon as the control goes out of scope, the Handle can no longer work.
+        # Therefor we keep the control save by poking it on the handle ourselves.
+        result.__control = control # save control from GC.
         return result
                     
     return logger, load, ground, solve

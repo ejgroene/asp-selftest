@@ -26,25 +26,6 @@ test = selftest.get_tester(__name__)
 
 
 @test
-def test_fucking_yield():
-    def p():
-        control = clingo.Control()
-        def g(c):
-            h = c.solve(yield_=True)
-            return h
-        def f():
-            control.add("a. b. c. d.")
-            control.ground()
-            return g(control)
-        return f
-    f = p()
-    h = f()
-    with h:
-        for m in h:
-            test.eq("a b c d", str(m))
-
-
-@test
 def without_session_no_problem_with_control():
     def control_plugin(next, source):
         control = clingo.Control()
@@ -54,6 +35,10 @@ def without_session_no_problem_with_control():
             return control.solve(yield_=True)
         return main
     response = control_plugin(None, source="a. b. c.")
+    # reponse saves the control from the GC iff we keep it in a local
+    # because the control is in the free variables of response
+    test.eq(('control', 'source'), response.__code__.co_freevars)
+    # so we call it now, and not in one line as in control_plugin(..)()
     result = response()
     models = 0
     with result:
@@ -70,6 +55,10 @@ def maybe_session_is_the_problem():
         def main():
             control.add(source)
             control.ground()
+            # we cannot use the trick from previous test because session2() already
+            # calls the plugin for us and we loose the control
+            # therefor we keep it save on the handle
+            # See also clingo_defaults_plugin.
             handle = control.solve(yield_=True)
             handle.__control = control  # save control from GC
             return handle
