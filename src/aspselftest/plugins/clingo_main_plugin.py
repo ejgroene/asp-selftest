@@ -12,25 +12,28 @@ def clingo_main_plugin(next, arguments=(), **etc):
             
     class App:
         """ As per Clingo spec: callbacks main() and logger(). """
-        exception = None
+        exceptions = []
                 
         def main(self, control, files):
             """ As required by clingo_main. It must not raise. """
             try:
                 self._logger, _main = next(control=control, files=files, arguments=arguments, **etc)  # [3]
-                return _main()
+                return _main()   #  [4]
             except Exception as e:
-                self.exception = e
+                self.exceptions.append(e)
                     
         def logger(self, code, message):
             """ As required by clingo_main. Forwards to next plugin."""
-            self._logger(code, message)
+            try:
+                self._logger(code, message)
+            except Exception as e:
+                self.exceptions.append(e)
 
     def main():
         app = App()
         exitcode = clingo.clingo_main(app, arguments)  # [2]
-        if app.exception:
-            raise app.exception
+        if app.exceptions:
+            raise app.exceptions[0]  # we report only the first one
         return exitcode
             
     return main  #[1]
@@ -60,6 +63,21 @@ def raise_errors_in_main(stdout):
     test.startswith(stdout.getvalue(), """clingo version 5.7.1
 Reading from stdin
 UNKNOWN""")
+
+
+@test
+def raise_exception_in_logger():
+
+    def plugin_raising_in_logger(control=None, **__):
+        def logger(code, message):
+            raise TypeError("oh no!")
+        def main():
+            control.add("not good")
+        return logger, main
+
+    main = clingo_main_plugin(plugin_raising_in_logger)
+    with test.raises(TypeError, "oh no!"):
+        main()
 
 
 @test
