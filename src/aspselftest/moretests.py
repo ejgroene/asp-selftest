@@ -59,6 +59,21 @@ Models""", diff=test.diff)
 
 
 @test
+def simple_syntax_error_with_clingo_main():
+    p = spawn_clingo_plus(b'plugin(".:errorplugin"). a', arguments=['--run-tests'])
+    test.startswith(p.stdout, b'clingo+ version 5.7.1\nReading from stdin\nUNKNOWN')
+    traceback = p.stderr
+    should = b"""-stdin.lp", line 2
+    1 plugin(".:errorplugin"). a
+      ^ syntax error, unexpected EOF
+aspselftest.plugins.messageparser.AspSyntaxError: syntax error, unexpected EOF
+"""
+    test.endswith(traceback, should, diff=test.diff)
+    test.comp.contains(p.stdout, b"*** ERROR")
+    test.comp.contains(traceback, b"*** ERROR")
+
+
+@test
 def clingo_drop_in_plus_tests(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f.lp'
     f.write_text('a. #program test_ikel(base).\n')
@@ -147,6 +162,7 @@ Models       : 0+""")
         e.exception.text)
     test.eq(stderr.getvalue(), f"UNHANDLED MESSAGE: code=MessageCode.RuntimeError, message: '{f}:1:8-13: error: syntax error, unexpected <IDENTIFIER>\\n'\n")
 
+
 @test
 def access_python_script_functions(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f'
@@ -165,17 +181,6 @@ models(1).
     test.contains(s, f"Testing {f}\n  base()\n  test_one()\n")
     test.startswith(stderr.getvalue(), "")
 
-
-@test.fixture
-def asp(code, name):
-    name.write_text(code)
-    yield name.as_posix()
-
-@test.fixture
-def with_asp(tmp_path, code, name):
-    fname = tmp_path/name
-    fname.write_text(code)
-    yield fname.as_posix()
 
 @test
 def bug_read_stdin_and_solve_with_run_tests():
