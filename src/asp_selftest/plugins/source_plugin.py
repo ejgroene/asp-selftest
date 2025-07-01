@@ -87,4 +87,3 @@ def no_source_given():
     test.eq(42, r)
     test.eq('next_main', trace[2])
     test.eq(3, len(trace))
-    

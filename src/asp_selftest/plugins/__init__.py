@@ -8,3 +8,5 @@ from .clingo_defaults_plugin import clingo_defaults_plugin
 from .testrunner_plugin import testrunner_plugin
 from .clingo_reify_plugin import clingo_reify_plugin
 from .insert_plugin_plugin import insert_plugin_plugin
+from .stdin_to_tempfile_plugin import stdin_to_tempfile_plugin
+

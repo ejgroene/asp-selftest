@@ -4,7 +4,6 @@
 
 
 import clingo
-import contextlib
 import sys
 
 from .plugins.misc import write_file
@@ -20,7 +19,9 @@ from .plugins import (
     clingo_control_plugin,
     clingo_sequencer_plugin,
     insert_plugin_plugin,
-    clingo_defaults_plugin)
+    clingo_defaults_plugin,
+    stdin_to_tempfile_plugin,
+)
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -97,21 +98,16 @@ class CompoundContext:
         return getattr(sys.modules['__main__'], name)
 
 
-    @contextlib.contextmanager
-    def avec(self, context):
-        self._contexts.append(context)
-        """ functional style new CompoundContext with one extra context """
-        yield self #CompoundContext(*self._contexts, context)
-        del self._contexts[-1]
-
-
 def clingo_compoundcontext_plugin(next, **etc):
+
     logger, load, _ground, solve = next(**etc)
+
     def ground(control, parts=(('base', ()),), context=None):
         compound_context = CompoundContext()
         if context:
             compound_context.add_context(context)
         _ground(control, parts=parts, context=compound_context)
+
     return logger, load, ground, solve
     
     
@@ -145,6 +141,7 @@ a(@a()). b(@b()). c(@c()).
     result = session2(
         plugins=(
             source_plugin,
+            stdin_to_tempfile_plugin,
             clingo_control_plugin,
             clingo_sequencer_plugin,
             clingo_compoundcontext_plugin,
@@ -155,8 +152,19 @@ a(@a()). b(@b()). c(@c()).
         context=ContextB(),
         yield_=True)
     test.isinstance(result, clingo.SolveHandle)
+    models = 0
+    print("CONTROL:", result.__control)
+    test.eq(
+        ['a("AA")', 'b("BB")', 'c("CC")', 'insert_plugin("asp_selftest.integration:context_a_plugin")'],
+        [str(a.symbol) for a in result.__control.symbolic_atoms])
     with result as h:
-        test.truth(h.get().satisfiable)
+        ###
+        ###  get(), resume(), model() etc FUCK UP THE HANDLE !!!!
+        ###  They discard the last model and start solving the next one.
+        ###  After those call, iteration is BROKEN
+        ###
         for m in h:
-            test.eq("a b c d", str(m))
+            models += 1
+            test.eq('a("AA") b("BB") c("CC") insert_plugin("asp_selftest.integration:context_a_plugin")', str(m))
+    test.eq(1, models)
 
