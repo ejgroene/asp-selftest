@@ -20,7 +20,7 @@ def clingo_syntaxerror_plugin(next, msg2exc=msg2exc, **etc):
     exceptions = []
 
     def logger(code, message):
-        _logger(code, message)
+        #_logger(code, message)
         rich_exception = msg2exc(code, message)
         exceptions.append(rich_exception)
 

@@ -111,12 +111,13 @@ def clingo_main_session_happy_flow(stdout, tmp_path):
 @test
 def clingo_main_session_error(tmp_path, stdout, stderr):
     file1 = write_file(tmp_path/'error.lp', 'error')
-    with test.raises(SyntaxError):
-        clingo_main_session(arguments=(file1,))   # PROBLEEM! de nieuwe testrunner plugin werkt niet samen met de syntaxerror_plugin!!!!!!!!!!!!!!!!!
+    with test.raises(SyntaxError, "syntax error, unexpected EOF") as e:
+        clingo_main_session(arguments=(file1,))
     err = stderr.getvalue()
-    test.startswith(err, "UNHANDLED MESSAGE: code=MessageCode.RuntimeError, message: '")
-    test.contains(err, file1)
-    test.endswith(err, "error.lp:2:1-2: error: syntax error, unexpected EOF\\n'\n")
+    out = stdout.getvalue()
+    test.eq('', err)
+    test.startswith(out, f"clingo+ version 5.7.1\nReading from ...{file1[-38:]}\nUNKNOWN\n\nModels       : 0+\nCalls        : 1\nTime")
+    test.endswith(e.exception.text, "    1 error\n      ^ syntax error, unexpected EOF")
 
 
 @test

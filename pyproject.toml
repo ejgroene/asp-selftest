@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "asp_selftest"
+name = "aspselftest"
+
 # dynamic as per setuptools_scm
 dynamic = ["version"]
 authors = [ { name="Erik Groeneveld", email="ejgroene@ieee.org" }, ]
