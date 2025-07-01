@@ -1,24 +1,16 @@
 #!/usr/bin/env python3
 
 import coverage
-coverage = coverage.Coverage(source_pkgs=["asp_selftest"])
+coverage = coverage.Coverage(source_pkgs=["aspselftest"])
 coverage.erase()
 coverage.start()
 
-import asp_selftest.arguments_tests
-import asp_selftest.utils
-import asp_selftest.asputil
-import asp_selftest.delegate
-import asp_selftest.session
-import asp_selftest.error_handling
-import asp_selftest.syntaxerrorhandler
-import asp_selftest.exceptionguard
-import asp_selftest.application
-import asp_selftest.tester
-import asp_selftest.runasptests
-import asp_selftest.moretests
-import asp_selftest.reifyhandler
-import asp_selftest.quote
+import aspselftest.plugins.clingo_main_plugin
+
+import aspselftest.session2
+import aspselftest.integration
+import aspselftest.arguments
+import aspselftest.moretests
 
 
 coverage.stop()

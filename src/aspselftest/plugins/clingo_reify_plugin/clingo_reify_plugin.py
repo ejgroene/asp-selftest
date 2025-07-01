@@ -1,12 +1,9 @@
+
 import clingo
 import pathlib
-import sys
 
-from .asputil import is_tuple, is_function, is_string, is_symbol, mk_symbol, mk_theory_atom, is_theory_term
-
-
-from .syntaxerrorhandler import ground_exc
-
+from .asputil import is_tuple, is_function, mk_symbol, mk_theory_atom
+from ..misc import write_file
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -37,44 +34,37 @@ THEORY_PATH = MY_PATH.parent
 THEORY_FILE = MY_PATH.with_name('reify.lp')
 
 
-def asp_reify(code):
-    """ support for reifying a snippet of ASP (entry point asp-reify)"""
-    # TODO make use of ground_exc
-    control = clingo.Control(arguments=['--warn', 'no-atom-undefined'])
-    control.add(code)
-    control.ground()
-    return reified_rules(control)
+def clingo_reify_plugin(next, on_rule=lambda _:None, parts=(('base', ()),), context=None, **etc):
+    """ Plugin turning rule predicates into reallified rules and adds them to the control."""
 
+    logger, _load, ground, solve = next(parts=parts, context=context)  # test **etc
 
-class ReifyHandler:
-
-    def load(this, self, control, parameters, piggies=None):
-        parts = parameters.get('parts', None)
-        if not parts:
-            parts = [('base', ())] # + [(p, ()) for p in self.programs or []]
-        ast = parameters['ast']
-
+    def load(control, files):
+        reground = True
         rules_added = set()
-        ground = True
-        context = parameters['context']
-        while ground:
-            tmpcontrol = self.control(parameters)
-            args = ()
-            tmpcontrol = clingo.Control(args, logger=self.logger, message_limit=1)
-            self.next.load(tmpcontrol, parameters)
-            self.next.ground(tmpcontrol, parts, context, piggies)
-            ground = False
-            for rule in reified_rules(tmpcontrol):
+
+        while reground:
+            reground = False
+            sub_control = clingo.Control()
+            _load(sub_control, files)
+            
+            for rule in rules_added:
+                sub_control.add(rule)
+            ground(sub_control, parts=parts, context=context)
+                        
+            for rule in reified_rules(sub_control):
                 if rule not in rules_added:
-                    clingo.ast.parse_string(rule, ast.append)
                     rules_added.add(rule)
-                    ground = True
-        self.next.load(control, parameters)
+                    sub_control.add(rule)
+                    on_rule(rule)
+                    reground = True
+                                
+        _load(control, files)
+                    
+        for rule in rules_added:
+            control.add(rule)
 
-
-    def logger(this, self, code, message):
-        if code == clingo.MessageCode.AtomUndefined:
-            return True
+    return logger, load, ground, solve
 
 
 def to_symbol(theory_term):
@@ -115,6 +105,7 @@ def make_function_from_symbols():
 
 
 def reified_rules(control):
+    """ Reads rule predicates from the control and returns reified ASP rules. """
 
     def reifies():
         by_signature = control.symbolic_atoms.by_signature
@@ -149,10 +140,15 @@ def reified_rules(control):
             yield f"#external {head}.\n"
 
 
-def test_reify(asp, reified, parts=None, context=None):
+# BELOW SOME TESTS FOR INSTANTIATING RULES
+
+def test_reified_rules(asp, reified, **etc):
+    """ Helper for testing reified_rules. """
     if "&rule" in asp:
         asp += f'#include "{THEORY_FILE}".\n'
-    control = ground_exc(asp, handlers=(ReifyHandler(),), parts=parts, context=context)
+    control = clingo.Control()
+    control.add(asp)
+    control.ground(**etc)
     new_rules = reified_rules(control)
     test.eq(reified.strip(), ''.join(new_rules).strip())
     return control
@@ -160,7 +156,7 @@ def test_reify(asp, reified, parts=None, context=None):
 
 @test
 def simple_fact_predicate():
-    test_reify(
+    test_reified_rules(
 """
 def(f(42)).
 rule(A) :- def(A).
@@ -171,7 +167,7 @@ rule(A) :- def(A).
 
 @test
 def simple_fact_theory():
-    test_reify(
+    test_reified_rules(
 """
 def(f(42)).
 &rule(A) :- def(A).
@@ -182,7 +178,7 @@ def(f(42)).
 
 @test
 def simple_rule():
-    test_reify(
+    test_reified_rules(
 """
 rule(f(41), g(42)).
 b.
@@ -195,7 +191,7 @@ f(41) :- g(42).
 
 @test
 def rule_with_condition():
-    test_reify(
+    test_reified_rules(
 """
 &rule(head(41)) { body0(42);  body1(N) : N=43..44 }.
 """, """
@@ -205,7 +201,7 @@ head(41) :- body0(42), body1(43), body1(44).
 
 @test
 def head_variable_theory():
-    test_reify(
+    test_reified_rules(
 """
 step(stuur(links)).
 &rule(A) { body0(42) }  :-  step(A).
@@ -216,7 +212,7 @@ stuur(links) :- body0(42).
 
 @test
 def head_variable_predicate():
-    test_reify(
+    test_reified_rules(
 """
 step(stuur(links)).
 rule(A, body0(42))  :-  step(A).
@@ -227,7 +223,7 @@ stuur(links) :- body0(42).
 
 @test
 def head_function():
-    test_reify(
+    test_reified_rules(
 """
 define(stuur).
 rule((F), body0(42))  :-  define(F).
@@ -238,7 +234,7 @@ stuur :- body0(42).
 
 @test
 def head_function_with_arg():
-    test_reify(
+    test_reified_rules(
 """
 define(stuur(links)).
 rule((F), body0(42))  :-  define(F).
@@ -249,7 +245,7 @@ stuur(links) :- body0(42).
 
 @test
 def head_function_with_additional_args():
-    test_reify(
+    test_reified_rules(
 """
 define(stuur(links, now)).
 rule((F, 2, 3), body0(42))  :-  define(F).
@@ -260,7 +256,7 @@ stuur(2,3,links,now) :- body0(42).
 
 @test
 def head_function_with_string():
-    test_reify(
+    test_reified_rules(
 """
 rule(("aap", 2, 3), body0(42)).
 """, """
@@ -270,7 +266,7 @@ aap(2,3) :- body0(42).
 
 @test
 def head_function_with_symbol():
-    test_reify(
+    test_reified_rules(
 """
 rule((aap, 2, 3), body0(42)).
 """, """
@@ -280,7 +276,7 @@ aap(2,3) :- body0(42).
 
 @test
 def tuples_in_theory():
-    test_reify(
+    test_reified_rules(
 """
 &rule((a, 1, 2)) { (b, 3),  (c, 4),  d(5) }.
 """, """
@@ -288,42 +284,121 @@ a(1,2) :- b(3), c(4), d(5).
 """)
 
 
-def quick_parse_asp(code):
-    ast = []
-    clingo.ast.parse_string(code, ast.append, logger=print)
-    return ast
+@test
+def reify_with_context(stderr):
+    class Context:
+        @staticmethod
+        def zeep():
+            return clingo.String("sop")
+    control = test_reified_rules("""
+                         b(@zeep).
+                         a.
+                         rule(geel, a).
+                         """,
+                         "geel :- a.",
+                         context=Context())
+    symbols = {str(sa.symbol) for sa in control.symbolic_atoms}
+    test.contains(symbols, 'b("sop")')
+
+
+# BELOW SOME TESTS FOR THE PLUGIN
+
+def test_reify_plugin(tmp_path, code, rules, trace=lambda _:None, **etc):
+    """ Helper for testing the plugin. """
+    f = write_file(tmp_path/'f.lp', code)
+    def next_plugin(**etc):
+        def load(control, files):
+            trace(('load', control, files))
+            for f in files:
+                control.load(f)
+        def ground(control, **etc):
+            trace(('ground', control, etc))
+            control.ground(**etc)
+        return None, load, ground, None
+    new_rules = set()
+    _, load, ground, _ = clingo_reify_plugin(next_plugin, on_rule=new_rules.add, **etc)
+    control = clingo.Control()
+    load(control, (f,))
+    test.eq(rules, new_rules)
+    ground(control, **etc)
+    return control, ground
 
 
 @test
-def reify_until_done():
-    control = test_reify(
+def reify_plugin_basics(tmp_path):
+    trace = []
+    control, ground = test_reify_plugin(tmp_path, "b. rule(a, b).", {"a :- b.\n"}, trace.append)
+
+    trace = iter(trace) 
+    l, c0, f = next(trace)  # test if it uses new control with next_plugin for load
+    test.eq('load', l)
+    test.ne(control, c0)
+    test.eq(1, len(f))
+    test.endswith(f[0], '/f.lp')
+
+    g, c1, etc = next(trace)  # test if it uses new control with next_plugin for ground
+    test.eq('ground', g)
+    test.ne(control, c1)
+    test.eq(c0, c1)
+    test.eq((('base', ()),), etc['parts'])
+    test.eq(None, etc['context'])
+
+    l, c0, f = next(trace)  # second load
+    test.eq('load', l)
+    test.ne(control, c0)
+    test.eq(1, len(f))
+    test.endswith(f[0], '/f.lp')
+
+    g, c2, etc = next(trace)  # second ground for ensuring end of propagation
+    test.eq('ground', g)
+    test.ne(control, c2)
+    test.eq(c0, c2)
+    test.eq((('base', ()),), etc['parts'])
+    test.eq(None, etc['context'])
+
+    l, c2, f = next(trace)  # test if is finally load the code into our control
+    test.eq('load', l)
+    test.eq(control, c2)
+    test.eq(1, len(f))
+    test.endswith(f[0], '/f.lp')
+
+    ground(control)
+    test.eq({'a', 'b', 'rule(a,b)'}, {str(a.symbol) for a in control.symbolic_atoms})
+    
+
+
+
+@test
+def reify_until_done(tmp_path):
+    control, _ = test_reify_plugin(tmp_path,
     f'#include "{THEORY_FILE}".'"""
     a.
     &rule(b) { a }.
     &rule(c) {} :- b.  % not instantiated until b is True
     """,
-    "#external c.\nb :- a.")
+    {'#external c.\n', 'b :- a.\n'})
     test.eq({'a', 'b', 'c'}, {str(a.symbol) for a in control.symbolic_atoms})
 
 
 @test
-def reify_with_disappering_atoms(stderr):
-    control = test_reify("""
+def reify_with_disappering_atoms(stderr, tmp_path):
+    control, _ = test_reify_plugin(tmp_path, """
             a.
             none(notgeel) :-  not geel.  % these cannot
             none(geel)    :-  geel.      % both be true
             rule(geel, a).
-            """, """
-            geel :- a.
-            """)
+            """, {
+            'geel :- a.\n'
+            })
     symbols = {str(sa.symbol) for sa in control.symbolic_atoms}
     test.contains(symbols, 'none(geel)')
     test.comp.contains(symbols, 'none(notgeel)')
 
 
 @test
-def reify_with_disappering_atoms_in_different_programs(stderr):
+def reify_with_disappering_atoms_in_different_programs(stderr, tmp_path):
     def reify(program_name):
+        parts = (('base', ()), (program_name, ()))
         asp_code = """
             none(notgeel) :-  not geel.
             none(geel)    :-  geel.
@@ -332,7 +407,12 @@ def reify_with_disappering_atoms_in_different_programs(stderr):
             a.
             #program test_not_a.
             """
-        control = test_reify(asp_code, "geel :- a.", parts=[('base', ()), (program_name, ())])
+        control, ground = test_reify_plugin(
+            tmp_path,
+            asp_code,
+            {"geel :- a.\n"}, 
+            parts=parts)
+        ground(control, parts=parts, context=None)
         return {str(sa.symbol) for sa in control.symbolic_atoms}
 
     symbols = reify('test_a')
@@ -345,17 +425,17 @@ def reify_with_disappering_atoms_in_different_programs(stderr):
 
 
 @test
-def reify_with_context(stderr):
+def reify_with_context_in_plugin(tmp_path):
     class Context:
         @staticmethod
         def zeep():
             return clingo.String("sop")
-    control = test_reify("""
+    control, _ = test_reify_plugin(tmp_path, """
                          b(@zeep).
                          a.
                          rule(geel, a).
                          """,
-                         "geel :- a.",
+                         {"geel :- a.\n"},
                          context=Context())
     symbols = {str(sa.symbol) for sa in control.symbolic_atoms}
     test.contains(symbols, 'b("sop")')

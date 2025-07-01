@@ -1,6 +1,13 @@
 # asp-selftest
 
-**In-source** test runner for _Answer Set Programming_ (`ASP`) with [Clingo](https://potassco.org).
+Starting with in-source testing in mind, `asp-selftest` has evolved into:
+
+ 1. **In-source** test runner for _Answer Set Programming_ (`ASP`) with [Clingo](https://potassco.org).
+ 2. Rich `SyntaxError`s with `ASP` source, based on Clingo's log messages.
+ 3. Minimalistic **plugins** based on `ASP` predicates used as directives.
+    (plugins: reification, clingo_main, dynamic plugins, sequencing, testrunner, mimic default clingo)
+
+## In-source Testing
 
 It allows one to write **constraints** in ASP that will automatically be checked on loading. Consider `logic.lp` which contains:
 
@@ -17,23 +24,36 @@ It allows one to write **constraints** in ASP that will automatically be checked
 
 Using `cannot` we capture the results from constraints that _cannot be true_. This leads to the following output:
 
-    AssertionError: MODEL:
+    $ clingo+ logic.lp --run-tests
+    ...
+    AssertionError: cannot("at least one edge")
+    File test.lp, line 1, in base().
+    Model:
+    <empty>
+
+If we fix it (remove it), we get the next failure:
+
+    $ clingo+ logic.lp --run-tests
+    ...
+    AssertionError: cannot("node z")
+    File test.lp, line 5, in test_edge_leads_to_nodes(base).
+    Model:
     edge(x,y)  node(x)    node(y)
-    Failures in logic.lp, #program test_edge_leads_to_nodes():
-    cannot("node z")
+
+
+## SyntaxError
 
 If we make a mistake, it tells us in a sensible way:
 
+    $ clingo+ logic.lp
     ...
-    File "asp-selftest/src/asp_selftest/syntaxerrorhandler.py", line 37, in logger
-      raise warn2raise(source, label, code, message)
-    File "logic.lp", line 2
-       1 node(A)  :-  edge(A, _).
-       2 node(B)  :-  edge(_, A).
-              ^ 'B' is unsafe
-         ^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  node(B):-[#inc_base];edge(#Anon0,A).
-       3
-       4 cannot("at least one edge")  :-  not { edge(_, _) } > 0.
+    Traceback (most recent call last):
+      ...
+      File "logic.lp", line 2
+        1 node(A)  :-  edge(A, _).
+        2 node(B)  :-  edge(_, A).
+               ^ 'B' is unsafe
+          ^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  node(B):-[#inc_base];edge(#Anon0,A).
 
 
 ## Status
@@ -72,11 +92,11 @@ With `in-source` testing, source and tests stay together in the same file. This 
 
 Run it using:
 
-    $ clingo+ <file.lp> ...
+    $ clingo+ <file.lp> --run-tests
 
 There is one additional option to silence the in-source Python tests:
 
-    $ clingo+ --silent
+    $ clingo+ --silent --run-tests
 
 
 # A bit of documentation
@@ -101,12 +121,7 @@ There is one additional option to silence the in-source Python tests:
 
    Note that `"step fact"` is just a way of distinquishing the constraint. It can be an atom, a string, a number or anything else.
 
-4. To enable testing constraints and to guard tests for empty model sets, we can optionally use `models` to set the expected number of models. In the example above, we would add:
-
-        models(1).
-
-
-5. Note that `cannot` is much like an _constraint_ in `ASP`.  To assert `somefact` is true, we must use `not`:
+3. Note that `cannot` is much like an _constraint_ in `ASP`.  To assert `somefact` is true, we must use `not`:
 
         somefact.
         cannot("somefact must be true")  :-  not somefact.
