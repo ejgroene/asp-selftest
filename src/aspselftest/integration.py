@@ -13,7 +13,7 @@ from clingo.script import enable_python
 enable_python()
 
 
-from .session2 import session2, clingo_main_session
+from .session2 import session2
 
 from .plugins import (
     source_plugin,
@@ -159,8 +159,4 @@ a(@a()). b(@b()). c(@c()).
         test.truth(h.get().satisfiable)
         for m in h:
             test.eq("a b c d", str(m))
-
-
-def clingo_plus_main(run_tests=False, arguments=[]):
-    return clingo_main_session(run_tests=run_tests, arguments=arguments)
 

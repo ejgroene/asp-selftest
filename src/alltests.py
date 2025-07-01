@@ -12,9 +12,6 @@ import aspselftest.integration
 import aspselftest.arguments
 import aspselftest.moretests
 
-#import asp_selftest.arguments_tests
-#import asp_selftest.moretests
-
 
 coverage.stop()
 coverage.save()

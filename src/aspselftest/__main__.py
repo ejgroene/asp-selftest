@@ -19,8 +19,8 @@ def clingo_plus():
     from .arguments import parse_plus_arguments
     args, remaining = parse_plus_arguments(remaining)
 
-    from .integration import clingo_plus_main
-    clingo_plus_main(run_tests=args.run_tests, arguments=remaining)
+    from .session2 import clingo_main_session
+    clingo_main_session(run_tests=args.run_tests, arguments=remaining)
     
     #import cProfile
     #with cProfile.Profile() as p:
