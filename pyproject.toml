@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "aspselftest"
+name = "asp_selftest"
 
 # dynamic as per setuptools_scm
 dynamic = ["version"]
@@ -26,7 +26,7 @@ dependencies=[
 
 
 [project.scripts]
-"clingo+"    = "aspselftest.__main__:clingo_plus"
+"clingo+"    = "asp_selftest.__main__:clingo_plus"
 
 
 [project.urls]

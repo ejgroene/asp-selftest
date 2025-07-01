@@ -21,7 +21,7 @@ test = selftest.get_tester(__name__)
 
 def spawn_clingo_plus(input="", arguments=[]):
     path = pathlib.Path(__file__).parent
-    p = subprocess.run(["python", "-c", f"from aspselftest.__main__ import clingo_plus; clingo_plus()"] + arguments,
+    p = subprocess.run(["python", "-c", f"from asp_selftest.__main__ import clingo_plus; clingo_plus()"] + arguments,
         env=os.environ | {'PYTHONPATH': path},
         input=input,
         capture_output=True)
@@ -66,7 +66,7 @@ def simple_syntax_error_with_clingo_main():
     should = b"""-stdin.lp", line 2
     1 plugin(".:errorplugin"). a
       ^ syntax error, unexpected EOF
-aspselftest.plugins.messageparser.AspSyntaxError: syntax error, unexpected EOF
+asp_selftest.plugins.messageparser.AspSyntaxError: syntax error, unexpected EOF
 """
     test.endswith(traceback, should, diff=test.diff)
     test.comp.contains(p.stdout, b"*** ERROR")
@@ -111,7 +111,7 @@ def syntax_errors_basics(tmp_path, argv, stdout, stderr):
     test.eq('syntax error, unexpected <IDENTIFIER>', e.exception.msg)
     test.contains(out, f"Reading from ...{f.as_posix()[-38:]}")
     err = stderr.getvalue()
-    test.contains(err, f"UNHANDLED MESSAGE: code=MessageCode.RuntimeError, message: '{f}:1:3-9: error: syntax error, unexpected <IDENTIFIER>\\n'\n")
+    test.eq(err, '')
 
 
 @test
@@ -160,7 +160,7 @@ Models       : 0+""")
     test.eq(
         "    1 syntax error \n             ^^^^^ syntax error, unexpected <IDENTIFIER>",
         e.exception.text)
-    test.eq(stderr.getvalue(), f"UNHANDLED MESSAGE: code=MessageCode.RuntimeError, message: '{f}:1:8-13: error: syntax error, unexpected <IDENTIFIER>\\n'\n")
+    test.eq(stderr.getvalue(), '')
 
 
 @test
