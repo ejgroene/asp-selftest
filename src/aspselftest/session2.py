@@ -9,14 +9,8 @@
 
 """
 
-import pathlib
-import subprocess
-import os
-import sys
-import functools
-import tempfile
-
 import selftest
+test = selftest.get_tester(__name__)
 
 from .plugins.misc import write_file, ExitCode
 
@@ -31,7 +25,6 @@ from .plugins import (
 )
 
 
-test = selftest.get_tester(__name__)
 
 
 def session2(plugins=(), **etc):

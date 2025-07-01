@@ -10,7 +10,7 @@ def clingo_main_plugin(next, arguments=(), **etc):
         main. It does not return anything as to avoid garbage collected C++ objects to ruin the program.
     """
             
-    class App:
+    class App: #(clingo.Application):
         """ As per Clingo spec: callbacks main() and logger(). """
         program_name = 'clingo+'
         exceptions = []

@@ -1,4 +1,6 @@
 import sys
+import os
+import tempfile
 import collections
 import itertools
 import clingo.ast
@@ -35,13 +37,21 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
     """ Runs all tests in every file separately, during loading. """
 
     next_logger, _load, ground, solve = next(
+        logger=logger,
         arguments=arguments,
         context=context,
-        **etc) # pass arguments and context!
+        **etc)
 
     def load(control, files):
+        stdin_tmp_file_name = None
+        if not files:
+            asp_code = open(os.dup(0)).read()  # read from stdin without removing the data
+            stdin_data = tempfile.NamedTemporaryFile('w', suffix='-stdin.lp')
+            print(asp_code, file=stdin_data, flush=True)
+            stdin_tmp_file_name = stdin_data.name
+            files = [stdin_tmp_file_name]
         for filename, tests in gather_tests(files, logger):
-            print("Testing", filename)
+            print("Testing", 'stdin' if filename==stdin_tmp_file_name else filename)
             tests_per_file = [('base', ((), 1)), *tests.items()]
                         
             for testname, (dependencies, lineno) in tests_per_file:
@@ -50,12 +60,12 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
                 print(" ", fulltestname, end='', flush=True)
 
                 try:
-                    sub_logger, sub_load, sub_ground, sub_solve = next(**etc)
-
                     new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
+                    sub_logger, sub_load, sub_ground, sub_solve = next(logger=logger, arguments=new_args, context=context, **etc)
                     sub_control = clingo.Control(
                         arguments=new_args,
-                        logger=logger)  # TODO TEST: must use given logger (root)
+                        logger=logger)
+
                     sub_load(sub_control, files=(filename,))
                     sub_ground(sub_control, parts=parts, context=context)
 
@@ -175,7 +185,7 @@ def use_arguments_for_testing():
         asp_program,
         arguments=['--const', 'a=42'],
         trace=trace.append)
-    test.eq({'arguments': ['--const', 'a=42'], 'context': None}, trace[0])
+    test.eq({'logger': None, 'arguments': ['--const', 'a=42'], 'context': None}, trace[0])
     with test.raises(AssertionError, "cannot(99)"):
         parse_and_run_tests(
             asp_program,

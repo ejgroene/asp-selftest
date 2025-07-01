@@ -19,6 +19,14 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
+def spawn_clingo_plus(input="", arguments=[]):
+    path = pathlib.Path(__file__).parent
+    p = subprocess.run(["python", "-c", f"from aspselftest.__main__ import clingo_plus; clingo_plus()"] + arguments,
+        env=os.environ | {'PYTHONPATH': path},
+        input=input,
+        capture_output=True)
+    return p
+
 
 @test
 def maybe_shutup_selftest(argv):
@@ -34,21 +42,17 @@ def maybe_shutup_selftest(argv):
 
 @test
 def main_entry_point_basics():
-    path = pathlib.Path(__file__).parent
-    p = subprocess.run(["python", "-c", f"from aspselftest.__main__ import clingo_plus; clingo_plus()", "--run-tests"],
-        env=os.environ | {'PYTHONPATH': path},
-        input=b"skaludicat. #program test_gotashparot(base).",
-        capture_output=True)
+    p = spawn_clingo_plus(input=b"skaludicat. #program test_gotashparot(base).", arguments=['--run-tests'])
     test.eq(b'', p.stderr)
     test.startswith(p.stdout.decode(), """\
 clingo+ version 5.7.1
 Reading from stdin
-Testing -
+Testing stdin
   base()
   test_gotashparot(base)
 Solving...
 Answer: 1
-
+skaludicat
 SATISFIABLE
 
 Models""", diff=test.diff)
@@ -172,3 +176,16 @@ def with_asp(tmp_path, code, name):
     fname = tmp_path/name
     fname.write_text(code)
     yield fname.as_posix()
+
+@test
+def bug_read_stdin_and_solve_with_run_tests():
+    # solving was prevented because stdin was read by the tester and gone for the next step
+    p = spawn_clingo_plus(input=b"a. b. c.", arguments=[])
+    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
+    p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--silent'])
+    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
+    p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-tests'])
+    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
+    p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--silent', '--run-tests'])
+    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
+    test.eq(b'', p.stderr)

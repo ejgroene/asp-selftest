@@ -17,6 +17,8 @@ def clingo_defaults_plugin(next, **etc):
     def load(control, files=()):
         for filename in files:
             control.load(filename)
+        if not files:
+            control.load('-')
 
     def ground(control, **kw):
         control.ground(**kw)
@@ -62,7 +64,14 @@ def keep_control_from_GC():
     test.eq(control, result.__control)
 
 
-@test
-def clingo_defaults_plugin_no_next():
-    # Wait and see how this works out when using this plugin as an real plugin with session().
-    pass
+#@test
+def no_files():
+    import os
+    logger, load, ground, solve = clingo_defaults_plugin(None)
+    control = clingo.Control()
+    os.write(0, b"aap")
+    load(control, files=())
+    ground(control)
+    with solve(control, yield_=True) as s:
+        for m in s:
+            print(m)
