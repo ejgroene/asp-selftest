@@ -18,7 +18,7 @@ def clingo_main_plugin(next, arguments=(), **etc):
         def main(self, control, files):
             """ As required by clingo_main. It must not raise. """
             try:
-                self._logger, _main = next(control=control, files=files, arguments=arguments, **etc)  # [3]
+                self._logger, _main = next(logger=self.logger, control=control, files=files, arguments=arguments, **etc)  # [3]
                 return _main()   #  [4]
             except Exception as e:
                 self.exceptions.append(e)
@@ -98,7 +98,7 @@ def plugin_basic_noop(stdout):
         #    when called with session(), we have the next plugin as 'next'.
         arguments.append(args)
         arguments.append(etc)
-        return None, next
+        return lambda *a: arguments.append(a), next
     main = clingo_main_plugin(next, arguments=[], etc='42')
     test.eq([], arguments)
     exitcode = main()
@@ -111,9 +111,13 @@ def plugin_basic_noop(stdout):
     test.eq([], plugin_kwargs['files'])
     test.eq('42', plugin_kwargs['etc'])
     test.eq([], plugin_kwargs['arguments'])
-    test.eq(4, len(plugin_kwargs))
-    main_args = arguments[2:4]
+    logger = plugin_kwargs['logger']
+    test.ismethod(logger)
+    test.eq(5, len(plugin_kwargs))
+    main_args = arguments[2:5]
     test.eq([(), {}], main_args)
+    logger(42, "he!")  # should call our own logger
+    test.eq((42, 'he!'), arguments[-1])
 
 
 @test
@@ -138,7 +142,7 @@ def pass_arguments_to_files(tmp_path, stdout):
 @test
 def forward_logger(stdout):
     trace = []
-    def next(control=None, files=(), arguments=()):
+    def next(logger=None, control=None, files=(), arguments=()):
         def next_main():
             control.add("error")  # trigger call of logger
         def logger(code, message):
@@ -153,7 +157,7 @@ def forward_logger(stdout):
 @test
 def pass_arguments_to_next_plugin(stdout):
     trace = []
-    def next_plugin(control=None, files=(), arguments=()):
+    def next_plugin(logger=None, control=None, files=(), arguments=()):
         trace[:] = arguments
         return 1, lambda: None
     main = clingo_main_plugin(next_plugin, arguments=['--project=no'])

@@ -25,12 +25,7 @@ dependencies=[
 
 
 [project.scripts]
-"clingo+"    = "asp_selftest.__main__:clingo_plus"
-asp-reify    = "asp_selftest.__main__:asp_reify"
-
-
-[tool.setuptools]
-script-files = ["bin/runasptests.sh"]
+"clingo+"    = "aspselftest.__main__:clingo_plus"
 
 
 [project.urls]

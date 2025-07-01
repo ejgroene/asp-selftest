@@ -1,5 +1,6 @@
 import sys
 import collections
+import itertools
 import clingo.ast
 
 import selftest
@@ -30,10 +31,10 @@ def gather_tests(files, logger):
     return reversed(all_tests.items())
 
 
-def testrunner_plugin(next, arguments=(), context=None, **etc):
+def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=None, **etc):
     """ Runs all tests in every file separately, during loading. """
 
-    logger, _load, ground, solve = next(
+    next_logger, _load, ground, solve = next(
         arguments=arguments,
         context=context,
         **etc) # pass arguments and context!
@@ -48,26 +49,29 @@ def testrunner_plugin(next, arguments=(), context=None, **etc):
                 parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
                 print(" ", fulltestname, end='', flush=True)
 
-                sub_logger, sub_load, sub_ground, sub_solve = next(**etc)
-                sub_control = clingo.Control(
-                    arguments=arguments,
-                    logger=sub_logger)
-                sub_load(sub_control, files=(filename,))
-                sub_ground(sub_control, parts=parts, context=context)
+                try:
+                    sub_logger, sub_load, sub_ground, sub_solve = next(**etc)
 
-                with sub_solve(sub_control, yield_=True) as models:
-                    for model in models:
-                        if failures := list(model.context.symbolic_atoms.by_signature('cannot', 1)):
-                            e = AssertionError(', '.join(str(f.symbol) for f in failures))
-                            e.add_note(f"File {filename}, line {lineno}, in {fulltestname}.")
-                            e.add_note("Model:\n" + format_symbols(s for s in model.symbols(shown=True) if s.name != 'cannot'))
-                            print()
-                            raise e
-                print()
+                    new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
+                    sub_control = clingo.Control(
+                        arguments=new_args,
+                        logger=logger)  # TODO TEST: must use given logger (root)
+                    sub_load(sub_control, files=(filename,))
+                    sub_ground(sub_control, parts=parts, context=context)
+
+                    with sub_solve(sub_control, yield_=True) as models:
+                        for model in models:
+                            if failures := list(model.context.symbolic_atoms.by_signature('cannot', 1)):
+                                e = AssertionError(', '.join(str(f.symbol) for f in failures))
+                                e.add_note(f"File {filename}, line {lineno}, in {fulltestname}.")
+                                e.add_note("Model:\n" + format_symbols(s for s in model.symbols(shown=True) if s.name != 'cannot'))
+                                raise e
+                finally:
+                    print(flush=True)
 
         _load(control, files)
 
-    return logger, load, ground, solve
+    return next_logger, load if run_tests else _load, ground, solve
 
 
 def tracing_clingo_plugin(trace=lambda x: None):
@@ -298,3 +302,14 @@ def dependencies(stderr, stdout):
     test.eq('', stderr.getvalue())
     test.endswith(stdout.getvalue(),
       "/inputfile.lp\n  base()\n  test_base(base)\n  test_one(base, one)\n")
+
+
+@test
+def run_tests_flag(stdout):
+    code = "#program test_a. cannot(true)."
+    with test.raises(AssertionError, "cannot(true)"):
+        parse_and_run_tests(code, run_tests=True)
+    with test.stdout as out:
+        parse_and_run_tests(code, run_tests=False)
+    test.eq('', out.getvalue())
+

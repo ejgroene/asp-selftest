@@ -15,7 +15,7 @@ def clingo_control_plugin(next, control=None, arguments=[], message_limit=20, **
     if not control:
         control = clingo.Control(logger=logger, arguments=arguments, message_limit=message_limit)
         
-    _logger, main = next(control=control, arguments=arguments, message_limit=message_limit, **etc)
+    _logger, main = next(logger=logger, control=control, arguments=arguments, message_limit=message_limit, **etc)
         
     return main
 
