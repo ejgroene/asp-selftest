@@ -5,6 +5,8 @@ import pathlib
 import selftest
 test = selftest.get_tester(__name__)
 
+from .misc import write_tempfile
+
 
 def source_plugin(next, source=None, label='string', files=(), **etc):
     """ Turns source as string into temporary file. """
@@ -12,9 +14,7 @@ def source_plugin(next, source=None, label='string', files=(), **etc):
     source_file = None
             
     if source:
-        source_file = tempfile.NamedTemporaryFile('w', suffix=f"-{label}.lp") 
-        source_file.write(source)
-        source_file.flush()
+        source_file = write_tempfile(f"-{label}.lp", source)
         files = (*files, source_file.name)
 
     _main = next(files=files, **etc)

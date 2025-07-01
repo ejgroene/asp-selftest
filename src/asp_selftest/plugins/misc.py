@@ -1,6 +1,7 @@
 import shutil
 import enum
 import itertools
+import tempfile
 from unittest import mock
 import clingo
 
@@ -25,6 +26,13 @@ class ExitCode(enum.IntEnum):
 def write_file(file, text):
     file.write_text(text)
     return file.as_posix()
+
+
+def write_tempfile(suffix, data):
+    f = tempfile.NamedTemporaryFile('w', suffix=suffix)
+    f.write(data)
+    f.flush()
+    return f
 
 
 CR = '\n' # trick to support old python versions that do not accecpt \ in f-strings

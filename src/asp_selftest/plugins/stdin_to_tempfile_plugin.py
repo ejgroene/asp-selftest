@@ -1,23 +1,22 @@
 import os
-import tempfile
 import subprocess
+import tempfile
 import pathlib
 
+from .misc import write_tempfile
 
 import selftest
 test = selftest.get_tester(__name__)
 
 
 def stdin_to_tempfile_plugin(next, files=(), **etc):
+    """ Writes stdin to a temporary file so it can be read by multiple plugins """
 
     stdinput_file = None
 
-    print("STDINNER:", files, file=open("fuck", 'w'))
     if not files:
         stdinput = open(os.dup(0)).read()
-        stdinput_file = tempfile.NamedTemporaryFile('w', suffix='-stdin.lp')
-        stdinput_file.write(stdinput)
-        stdinput_file.flush()
+        stdinput_file = write_tempfile('-stdin.lp', stdinput)
         files = [stdinput_file.name]
 
     _main = next(files=files, **etc)
