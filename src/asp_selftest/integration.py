@@ -21,11 +21,69 @@ from .plugins import (
     insert_plugin_plugin,
     clingo_defaults_plugin,
     stdin_to_tempfile_plugin,
+    compound_context_plugin,
 )
 
 import selftest
 test = selftest.get_tester(__name__)
 
+
+class ContextA:
+    def a(self):
+        return clingo.String("AA")
+    
+def context_a_plugin(next, **etc):
+    logger, load, _ground, solve = next(**etc)
+    def ground(control, parts, context):
+        context.add_context(ContextA())
+        _ground(control, parts=parts, context=context)
+    return logger, load, ground, solve
+
+
+@test
+def use_multiple_contexts():
+    class ContextB:
+        def b(self):
+            return clingo.String("BB")
+
+    aspcode = f"""\
+insert_plugin("{__name__}:{context_a_plugin.__qualname__}").
+#script (python)
+import clingo
+def c():
+    return clingo.String("CC")
+#end.
+a(@a()). b(@b()). c(@c()).
+"""
+    result = session2(
+        plugins=(
+            source_plugin,
+            stdin_to_tempfile_plugin,
+            clingo_control_plugin,
+            clingo_sequencer_plugin,
+            compound_context_plugin,
+            insert_plugin_plugin,
+            clingo_defaults_plugin
+        ),
+        source=aspcode,
+        context=ContextB(),
+        yield_=True)
+    test.isinstance(result, clingo.SolveHandle)
+    models = 0
+    print("CONTROL:", result.__control)
+    test.eq(
+        ['a("AA")', 'b("BB")', 'c("CC")', 'insert_plugin("asp_selftest.integration:context_a_plugin")'],
+        [str(a.symbol) for a in result.__control.symbolic_atoms])
+    with result as h:
+        ###
+        ###  get(), resume(), model() etc FUCK UP THE HANDLE !!!!
+        ###  They discard the last model and start solving the next one.
+        ###  After those call, iteration is BROKEN
+        ###
+        for m in h:
+            models += 1
+            test.eq('a("AA") b("BB") c("CC") insert_plugin("asp_selftest.integration:context_a_plugin")', str(m))
+    test.eq(1, models)
 
 
 @test
@@ -76,95 +134,4 @@ def maybe_session_is_the_problem():
         test.eq('a b c', m)
     test.eq(1, models)
 
-
-class CompoundContext:
-    """ Clingo looks up functions in __main__ OR in context; we need both.
-        (Functions defined in #script land in __main__)
-    """
-
-    def __init__(self, *contexts):
-        self._contexts = list(contexts)
-
-
-    def add_context(self, *context):
-        self._contexts += context
-        return self
-
-
-    def __getattr__(self, name):
-        for c in self._contexts:
-            if f := getattr(c, name, None):
-                return f
-        return getattr(sys.modules['__main__'], name)
-
-
-def clingo_compoundcontext_plugin(next, **etc):
-
-    logger, load, _ground, solve = next(**etc)
-
-    def ground(control, parts=(('base', ()),), context=None):
-        compound_context = CompoundContext()
-        if context:
-            compound_context.add_context(context)
-        _ground(control, parts=parts, context=compound_context)
-
-    return logger, load, ground, solve
-    
-    
-class ContextA:
-    def a(self):
-        return clingo.String("AA")
-    
-def context_a_plugin(next, **etc):
-    logger, load, _ground, solve = next(**etc)
-    def ground(control, parts, context):
-        context.add_context(ContextA())
-        _ground(control, parts=parts, context=context)
-    return logger, load, ground, solve
-
-    
-@test
-def use_multiple_contexts():
-    class ContextB:
-        def b(self):
-            return clingo.String("BB")
-
-    aspcode = f"""\
-insert_plugin("{__name__}:{context_a_plugin.__qualname__}").
-#script (python)
-import clingo
-def c():
-    return clingo.String("CC")
-#end.
-a(@a()). b(@b()). c(@c()).
-"""
-    result = session2(
-        plugins=(
-            source_plugin,
-            stdin_to_tempfile_plugin,
-            clingo_control_plugin,
-            clingo_sequencer_plugin,
-            clingo_compoundcontext_plugin,
-            insert_plugin_plugin,
-            clingo_defaults_plugin
-        ),
-        source=aspcode,
-        context=ContextB(),
-        yield_=True)
-    test.isinstance(result, clingo.SolveHandle)
-    models = 0
-    print("CONTROL:", result.__control)
-    test.eq(
-        ['a("AA")', 'b("BB")', 'c("CC")', 'insert_plugin("asp_selftest.integration:context_a_plugin")'],
-        [str(a.symbol) for a in result.__control.symbolic_atoms])
-    with result as h:
-        ###
-        ###  get(), resume(), model() etc FUCK UP THE HANDLE !!!!
-        ###  They discard the last model and start solving the next one.
-        ###  After those call, iteration is BROKEN
-        ###
-        for m in h:
-            models += 1
-            test.eq('a("AA") b("BB") c("CC") insert_plugin("asp_selftest.integration:context_a_plugin")', str(m))
-    test.eq(1, models)
 
