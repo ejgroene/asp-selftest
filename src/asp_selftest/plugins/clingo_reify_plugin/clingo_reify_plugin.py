@@ -43,10 +43,9 @@ def clingo_reify_plugin(
         **etc):
     """ Plugin turning rule predicates into reallified rules and adds them to the control."""
 
-    logger, _load, ground, _solve = next(parts=parts, context=context, arguments=arguments, **etc)  # test **etc
+    logger, _load, ground, solve = next(parts=parts, context=context, arguments=arguments, **etc)  # test **etc
 
     def load(control, files):
-        print(files, list_symbols(control), file=open("solvezucht.txt", 'w'))
         reground = True
         rules_added = set()
 
@@ -70,12 +69,6 @@ def clingo_reify_plugin(
                     
         for rule in rules_added:
             control.add(rule)
-
-    def solve(control, yield_=False, on_model=None):
-        def go(m):
-            print(m, file=open("solvezucht.txt", 'a'))
-        return _solve(control, yield_=yield_, on_model=go)
-
 
     return logger, load, ground, solve
 

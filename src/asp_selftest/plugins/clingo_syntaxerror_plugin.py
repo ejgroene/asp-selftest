@@ -1,4 +1,5 @@
 import os
+import itertools
 import clingo
 
 from .messageparser import warn2raise
@@ -31,8 +32,9 @@ def clingo_syntaxerror_plugin(next, msg2exc=msg2exc, **etc):
             if not exceptions:
                 raise e
         if exceptions:
-            for e in exceptions[1:]:
-                exceptions[0].add_note(f"followed by: {e}")
+            notes = ((s, len(tuple(n))) for s, n in itertools.groupby(exceptions[1:], lambda e: f"followed by: {e}"))
+            x = [f"{s} (repeated {n} times)" if n > 1 else s for s, n in notes]
+            exceptions[0].__notes__ = x
             raise exceptions[0]
         return result
             
@@ -271,4 +273,18 @@ def raise_exception_in_context():
     control = clingo.Control(logger=logger)
     with test.raises(ZeroDivisionError, "division by zero"):
         main()
+
+
+@test
+def count_repeated_errors():
+    def next_plugin():
+        def main():
+            control.add("a(@f()). b(@f()). c(@f()).")
+            control.ground()
+        return lambda c, m: None, main
+    logger, main = clingo_syntaxerror_plugin(next_plugin)
+    control = clingo.Control(logger=logger)
+    with test.raises(SyntaxError, "operation undefined:  function 'f' not found") as e:
+        main()
+    test.eq(["followed by: operation undefined:  function 'f' not found (<asp code>, line 1) (repeated 2 times)"], e.__notes__)
 
