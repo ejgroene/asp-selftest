@@ -20,7 +20,7 @@ def clingo_plus():
     args, remaining = parse_plus_arguments(remaining)
 
     from .session2 import clingo_main_session
-    clingo_main_session(run_tests=args.run_tests, arguments=remaining)
+    clingo_main_session(run_tests=args.run_asp_tests, arguments=remaining)
     
     #import cProfile
     #with cProfile.Profile() as p:

@@ -35,6 +35,15 @@ def write_tempfile(suffix, data):
     return f
 
 
+def list_symbols(control):
+    return [str(a.symbol) for a in control.symbolic_atoms]
+
+
+def create_control(arguments=(), logger=None, **etc):
+    new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
+    return clingo.Control(arguments=new_args, logger=logger)
+
+
 CR = '\n' # trick to support old python versions that do not accecpt \ in f-strings
 
 def batched(iterable, n):

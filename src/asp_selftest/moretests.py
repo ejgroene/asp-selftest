@@ -34,7 +34,7 @@ def maybe_shutup_selftest(argv):
     try:
         maybe_silence_tester()
     except AssertionError as e:
-        test.startswith(str(e), 'In order for --silent to work, Tester <Tester None created at:')
+        test.startswith(str(e), 'In order to NOT run Python tests, Tester <Tester None created at:')
         test.endswith(str(e), 'must have been configured to NOT run tests.')
     # this indirectly tests if the code above actually threw the AssertionError
     test.eq(True, selftest.get_tester(None).option_get('run'))
@@ -42,7 +42,7 @@ def maybe_shutup_selftest(argv):
 
 @test
 def main_entry_point_basics():
-    p = spawn_clingo_plus(input=b"skaludicat. #program test_gotashparot(base).", arguments=['--run-tests'])
+    p = spawn_clingo_plus(input=b"skaludicat. #program test_gotashparot(base).", arguments=['--run-asp-tests'])
     test.eq(b'', p.stderr)
     test.startswith(p.stdout.decode(), """\
 clingo+ version 5.7.1
@@ -60,7 +60,7 @@ Models""", diff=test.diff)
 
 @test
 def simple_syntax_error_with_clingo_main():
-    p = spawn_clingo_plus(b'plugin(".:errorplugin"). a', arguments=['--run-tests'])
+    p = spawn_clingo_plus(b'plugin(".:errorplugin"). a', arguments=['--run-asp-tests'])
     test.startswith(p.stdout, b'clingo+ version 5.7.1\nReading from stdin\nUNKNOWN')
     traceback = p.stderr
     should = b"""-stdin.lp", line 2
@@ -77,7 +77,7 @@ asp_selftest.plugins.messageparser.AspSyntaxError: syntax error, unexpected EOF
 def clingo_drop_in_plus_tests(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f.lp'
     f.write_text('a. #program test_ikel(base).\n')
-    argv += [f.as_posix()]
+    argv += [f.as_posix(), '--run-python-tests']  # we can not NOT run the Python tests here
     clingo_plus()
     s = iter(stdout.getvalue().splitlines())
     test.eq('clingo+ version 5.7.1', next(s))
@@ -104,7 +104,7 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout, stderr):
 def syntax_errors_basics(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f'
     f.write_text("a syntax error")
-    argv += [f.as_posix()]
+    argv += [f.as_posix(), '--run-python-tests']
     with test.raises(SyntaxError) as e:
         clingo_plus()
     out = stdout.getvalue()
@@ -123,7 +123,7 @@ def tester_runs_tests(tmp_path, argv, stdout, stderr):
     cannot("fact") :- not fact(a).
     models(1).
     """)
-    argv += [f.as_posix(), '--run-tests']
+    argv += [f.as_posix(), '--run-asp-tests', '--run-python-tests']
     clingo_plus()
     test.contains(stdout.getvalue(), f"Testing {f}\n  base()\n  test_fact(base)\n")
     test.startswith(stderr.getvalue(), "")
@@ -141,7 +141,7 @@ def clingo_dropin_default_hook_tests(tmp_path, argv, stdout, stderr):
     cannot("fact 2") :- not fact(a).
     models(1).
     """)
-    argv += [f.as_posix(), '--run-tests']
+    argv += [f.as_posix(), '--run-asp-tests', '--run-python-tests']
     clingo_plus()
     s = stdout.getvalue()
     test.contains(s, f"Testing {f}\n  base()\n  test_fact_1(base)\n  test_fact_2(base)\n")
@@ -152,7 +152,7 @@ def clingo_dropin_default_hook_tests(tmp_path, argv, stdout, stderr):
 def clingo_dropin_default_hook_errors(tmp_path, argv, stdout, stderr):
     f = tmp_path/'f'
     f.write_text("""syntax error """)
-    argv += [f.as_posix()]
+    argv += [f.as_posix(), '--run-python-tests']
     with test.raises(SyntaxError, "syntax error, unexpected <IDENTIFIER>") as e:
         clingo_plus()
     test.contains(stdout.getvalue(), """UNKNOWN\n
@@ -175,7 +175,7 @@ def my_func(a):
 something(@my_func("hello")).
 models(1).
     """)
-    argv += [f.as_posix(), '--run-tests']
+    argv += [f.as_posix(), '--run-asp-tests', '--run-python-tests']
     clingo_plus()
     s = stdout.getvalue()
     test.contains(s, f"Testing {f}\n  base()\n  test_one()\n")
@@ -185,12 +185,12 @@ models(1).
 @test
 def bug_read_stdin_and_solve_with_run_tests():
     # solving was prevented because stdin was read by the tester and gone for the next step
+    p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-python-tests'])
+    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=[])
     test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
-    p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--silent'])
+    p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-python-tests', '--run-asp-tests'])
     test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
-    p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-tests'])
-    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
-    p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--silent', '--run-tests'])
+    p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-asp-tests'])
     test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
     test.eq(b'', p.stderr)

@@ -22,6 +22,8 @@ from .plugins import (
     clingo_sequencer_plugin,
     clingo_defaults_plugin,
     testrunner_plugin,
+    clingo_reify_plugin,
+    stdin_to_tempfile_plugin,
 )
 
 
@@ -77,6 +79,7 @@ common_plugins = (
     clingo_syntaxerror_plugin,
     clingo_sequencer_plugin,
     testrunner_plugin,
+    clingo_reify_plugin,
     clingo_defaults_plugin,
 )
 
@@ -84,6 +87,7 @@ def clingo_main_session(**kwargs):
     return session2(
         plugins=(
             clingo_main_plugin,
+            stdin_to_tempfile_plugin,
             *common_plugins),
         **kwargs)
 
@@ -130,16 +134,18 @@ def session_with_source(stderr):
 
 
 @test
-def test_session2_not_wat():
+def test_session2_not_wat(stdout):
     solve_handle = clingo_session(source="a. b. c(a).", yield_=True)
     with solve_handle as result:
         for model in result:
             test.eq('a b c(a)', str(model))
+    test.endswith(stdout.getvalue(), "-string.lp\n  base()\n")
 
 
 @test
-def session_with_file(tmp_path):
+def session_with_file(tmp_path, stdout):
     file1 = tmp_path/'test.lp'
     file1.write_text('test(1).')
     solveresult = clingo_session(files=(file1.as_posix(),))
     test.truth(solveresult.satisfiable)
+    test.endswith(stdout.getvalue(), "test.lp\n  base()\n")

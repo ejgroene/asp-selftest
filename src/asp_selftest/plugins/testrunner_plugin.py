@@ -29,7 +29,10 @@ def gather_tests(files, logger):
                 raise AssertionError(f"Duplicate test: {name!r} in {filename}.")
             tests[name] = (dependencies, ast.location.begin.line)
 
-    clingo.ast.parse_files(files, callback=_filter_program, logger=logger)
+    def _logger(code, message):
+        if code != clingo.MessageCode.FileIncluded:
+            logger(code, message)
+    clingo.ast.parse_files(files, callback=_filter_program, logger=_logger)
     return reversed(all_tests.items())
 
 
@@ -51,7 +54,7 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
             stdin_tmp_file_name = stdin_data.name
             files = [stdin_tmp_file_name]
         for filename, tests in gather_tests(files, logger):
-            print("Testing", 'stdin' if filename==stdin_tmp_file_name else filename)
+            print("Testing", 'stdin' if filename.endswith('-stdin.lp') else filename)
             tests_per_file = [('base', ((), 1)), *tests.items()]
                         
             for testname, (dependencies, lineno) in tests_per_file:
@@ -135,7 +138,7 @@ def testrunner_plugin_no_failures(tmp_path, stdout):
 
 
 @test
-def run_tests_per_included_file_separately(tmp_path, stdout):
+def run_tests_per_included_file_separately(tmp_path, stdout, stderr):
     part_a = write_file(tmp_path/'part_a.lp',
         f'#program test_a.')
     part_b = write_file(tmp_path/'part_b.lp',
@@ -143,9 +146,10 @@ def run_tests_per_included_file_separately(tmp_path, stdout):
     part_c = write_file(tmp_path/'part_c.lp',
         f'#include "{part_b}".  #include "{part_a}".  #program test_c.')
 
-    _, load, ground, solve = testrunner_plugin(tracing_clingo_plugin())
-    main_control = clingo.Control()
+    _, load, ground, solve = testrunner_plugin(tracing_clingo_plugin(), arguments=['--warn', 'no-file-included'])
+    main_control = clingo.Control(arguments=['--warn', 'no-file-included'])
     load(main_control, files=(part_c,))
+    test.eq('', stderr.getvalue())
     out = stdout.getvalue()
     test.contains(out, f"""\
 Testing {part_b}
@@ -172,13 +176,14 @@ def parse_and_run_tests(asp_code, trace=lambda _:None, **etc):
     
 
 @test
-def cannot_in_base():
+def cannot_in_base(stdout):
     with test.raises(AssertionError, 'cannot(fail)'):
         parse_and_run_tests("cannot(fail).")  # constraints in base
+    test.endswith(stdout.getvalue(), "/inputfile.lp\n  base()\n")
     
 
 @test
-def use_arguments_for_testing():
+def use_arguments_for_testing(stdout):
     trace = []
     asp_program = "sum(a). cannot(a) :- not sum(42)."
     parse_and_run_tests(
@@ -190,11 +195,12 @@ def use_arguments_for_testing():
         parse_and_run_tests(
             asp_program,
             arguments=['--const', 'a=99'])
+    test.endswith(stdout.getvalue(), "/inputfile.lp\n  base()\n")
 
 
 
 @test
-def use_context_when_running_tests():
+def use_context_when_running_tests(stdout):
     trace = []
     asp_program = "#program test_a_42. a(42). cannot(@a()) :- a(@a())."
     n = 43
@@ -212,6 +218,7 @@ def use_context_when_running_tests():
         parse_and_run_tests(
             asp_program,
             context=MyContext())
+    test.endswith(stdout.getvalue(), "/inputfile.lp\n  base()\n  test_a_42()\n")
     
         
 @test

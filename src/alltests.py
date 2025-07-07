@@ -11,6 +11,7 @@ import asp_selftest.session2
 import asp_selftest.integration
 import asp_selftest.arguments
 import asp_selftest.moretests
+import asp_selftest.lib
 
 
 coverage.stop()

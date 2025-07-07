@@ -1,9 +1,9 @@
-
+import sys
 import clingo
 import pathlib
 
 from .asputil import is_tuple, is_function, mk_symbol, mk_theory_atom
-from ..misc import write_file
+from ..misc import write_file, create_control, list_symbols
 
 import selftest
 test = selftest.get_tester(__name__)
@@ -34,18 +34,25 @@ THEORY_PATH = MY_PATH.parent
 THEORY_FILE = MY_PATH.with_name('reify.lp')
 
 
-def clingo_reify_plugin(next, on_rule=lambda _:None, parts=(('base', ()),), context=None, **etc):
+def clingo_reify_plugin(
+        next,
+        on_rule=lambda _:None,
+        parts=(('base', ()),),
+        context=None,
+        arguments=(),
+        **etc):
     """ Plugin turning rule predicates into reallified rules and adds them to the control."""
 
-    logger, _load, ground, solve = next(parts=parts, context=context)  # test **etc
+    logger, _load, ground, _solve = next(parts=parts, context=context, arguments=arguments, **etc)  # test **etc
 
     def load(control, files):
+        print(files, list_symbols(control), file=open("solvezucht.txt", 'w'))
         reground = True
         rules_added = set()
 
         while reground:
             reground = False
-            sub_control = clingo.Control()
+            sub_control = create_control(arguments=[*arguments, '--warn', 'no-atom-undefined'], **etc)
             _load(sub_control, files)
             
             for rule in rules_added:
@@ -63,6 +70,12 @@ def clingo_reify_plugin(next, on_rule=lambda _:None, parts=(('base', ()),), cont
                     
         for rule in rules_added:
             control.add(rule)
+
+    def solve(control, yield_=False, on_model=None):
+        def go(m):
+            print(m, file=open("solvezucht.txt", 'a'))
+        return _solve(control, yield_=yield_, on_model=go)
+
 
     return logger, load, ground, solve
 
@@ -146,7 +159,7 @@ def test_reified_rules(asp, reified, **etc):
     """ Helper for testing reified_rules. """
     if "&rule" in asp:
         asp += f'#include "{THEORY_FILE}".\n'
-    control = clingo.Control()
+    control = clingo.Control(arguments=['--warn', 'no-atom-undefined'])
     control.add(asp)
     control.ground(**etc)
     new_rules = reified_rules(control)
@@ -177,7 +190,7 @@ def(f(42)).
 
 
 @test
-def simple_rule():
+def simple_rule(stderr):
     test_reified_rules(
 """
 rule(f(41), g(42)).
@@ -187,6 +200,7 @@ c :- f(41).
 """, """
 f(41) :- g(42).
 """)
+    test.eq('', stderr.getvalue())
 
 
 @test
@@ -303,7 +317,7 @@ def reify_with_context(stderr):
 
 # BELOW SOME TESTS FOR THE PLUGIN
 
-def test_reify_plugin(tmp_path, code, rules, trace=lambda _:None, **etc):
+def test_reify_plugin(tmp_path, code, rules, trace=lambda _:None, arguments=(), **etc):
     """ Helper for testing the plugin. """
     f = write_file(tmp_path/'f.lp', code)
     def next_plugin(**etc):
@@ -316,8 +330,8 @@ def test_reify_plugin(tmp_path, code, rules, trace=lambda _:None, **etc):
             control.ground(**etc)
         return None, load, ground, None
     new_rules = set()
-    _, load, ground, _ = clingo_reify_plugin(next_plugin, on_rule=new_rules.add, **etc)
-    control = clingo.Control()
+    _, load, ground, _ = clingo_reify_plugin(next_plugin, on_rule=new_rules.add, arguments=arguments, **etc)
+    control = clingo.Control(arguments=arguments)
     load(control, (f,))
     test.eq(rules, new_rules)
     ground(control, **etc)
@@ -440,3 +454,32 @@ def reify_with_context_in_plugin(tmp_path):
     symbols = {str(sa.symbol) for sa in control.symbolic_atoms}
     test.contains(symbols, 'b("sop")')
 
+
+@test
+def use_proper_logger(tmp_path):
+    trace = {}
+    def my_logger(code, message):
+        trace[code] = message
+    try:
+        test_reify_plugin(tmp_path, "a", {}, logger=my_logger)
+    except RuntimeError as e:
+        test.eq('parsing failed', str(e))
+    finally:
+        code, message = next(iter(trace.items()))
+        test.eq(clingo.MessageCode.RuntimeError, code)
+        test.endswith(message, " error: syntax error, unexpected EOF\n")
+
+
+@test
+def pass_arguments_properly(tmp_path):
+    control, _ = test_reify_plugin(tmp_path, "a(1). a(1/0).", set(), arguments=['--warn', 'no-operation-undefined'])
+    test.eq(['a(1)'], list_symbols(control))
+
+
+@test
+def pass_context_properly(tmp_path):
+    class Context:
+        def f(self):
+            return clingo.Number(42)
+    control, _ = test_reify_plugin(tmp_path, "a(@f()).", set(), context=Context())
+    test.eq(['a(42)'], list_symbols(control))

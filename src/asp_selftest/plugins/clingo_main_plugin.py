@@ -76,7 +76,7 @@ UNKNOWN""")
 
 
 @test
-def raise_exception_in_logger():
+def raise_exception_in_logger(stdout):
 
     def plugin_raising_in_logger(control=None, **__):
         def logger(code, message):
@@ -88,6 +88,7 @@ def raise_exception_in_logger():
     main = clingo_main_plugin(plugin_raising_in_logger)
     with test.raises(TypeError, "oh no!"):
         main()
+    test.startswith(stdout.getvalue(), "clingo+ version 5.7.1")
 
 
 @test
