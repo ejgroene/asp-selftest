@@ -41,6 +41,7 @@ def ground_exc(source=None, label=None, files=(), include_paths=(), arguments=()
         clingo_session(
             control=control,
             source=source,
+            label=label,
             files=files,
             arguments=arguments,
             yield_=True,

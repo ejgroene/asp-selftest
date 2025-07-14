@@ -8,13 +8,13 @@ test = selftest.get_tester(__name__)
 from .misc import write_tempfile
 
 
-def source_plugin(next, source=None, label='string', files=(), **etc):
+def source_plugin(next, source=None, label=None, files=(), **etc):
     """ Turns source as string into temporary file. """
     
     source_file = None
             
     if source:
-        source_file = write_tempfile(f"-{label}.lp", source)
+        source_file = write_tempfile(f"-{label or 'string'}.lp", source)
         files = (*files, source_file.name)
 
     _main = next(files=files, **etc)
@@ -87,3 +87,16 @@ def no_source_given():
     test.eq(42, r)
     test.eq('next_main', trace[2])
     test.eq(3, len(trace))
+
+
+@test
+def avoid_None_as_label():
+    trace = []
+    def next_plugin(source='no-source', label='no-label', files=()):
+        trace.append(source)
+        trace.append(label)
+        trace.append(files)
+    main = source_plugin(next_plugin, source="a.")
+    test.eq('no-source', trace[0])
+    test.eq('no-label', trace[1])
+    test.endswith(trace[2][0], '-string.lp')

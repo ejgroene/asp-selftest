@@ -48,7 +48,7 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
     def load(control, files):
         stdin_tmp_file_name = None
         if not files:
-            asp_code = open(os.dup(0)).read()  # read from stdin without removing the data
+            asp_code = open(os.dup(0)).read()  # read from stdin without removing the data  #TODO REMOVE
             stdin_data = tempfile.NamedTemporaryFile('w', suffix='-stdin.lp')
             print(asp_code, file=stdin_data, flush=True)
             stdin_tmp_file_name = stdin_data.name
