@@ -26,7 +26,8 @@ from .plugins import (
     stdin_to_tempfile_plugin,
 )
 
-
+import clingo
+VERSION = '.'.join(map(str,clingo.version()))
 
 
 def session2(plugins=(), **etc):
@@ -107,9 +108,11 @@ def clingo_main_session_happy_flow(stdout, tmp_path):
     exitcode = clingo_main_session(arguments=(file1.as_posix(),))
     test.eq(exitcode, ExitCode.SAT)
     out = stdout.getvalue()
-    test.startswith(out, "clingo+ version 5.7.1\nReading from ...")
-    test.contains(out, "Answer: 1\na\nSATISFIABLE\n\nModels       : 1+\n")
-    #test.endswith(out, "CPU Time     : 0.000s\n")
+    test.startswith(out, f"clingo+ version {VERSION}\nReading from ...")
+    i = out.find("Time: 0.0")
+    j = out.find("s)\na\n")
+    out = out[:i] + 'xxx' + out[j:] 
+    test.contains(out, "Answer: 1 (xxxs)\na\nSATISFIABLE\n\nModels       : 1+\n")
 
 
 @test
@@ -120,7 +123,7 @@ def clingo_main_session_error(tmp_path, stdout, stderr):
     err = stderr.getvalue()
     out = stdout.getvalue()
     test.eq('', err)
-    test.startswith(out, f"clingo+ version 5.7.1\nReading from ...{file1[-38:]}\nUNKNOWN\n\nModels       : 0+\nCalls        : 1\nTime")
+    test.startswith(out, f"clingo+ version {VERSION}\nReading from ...{file1[-38:]}\nUNKNOWN\n\nModels       : 0+\nCalls        : 1\nTime")
     test.endswith(e.exception.text, "    1 error\n      ^ syntax error, unexpected EOF")
 
 

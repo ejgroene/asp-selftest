@@ -5,6 +5,8 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
+VERSION = '.'.join(map(str,clingo.version()))
+
 def clingo_main_plugin(next, arguments=(), **etc):
     """ Uses clingo_main() to drive the plugins. It is meant for implementing a Clingo compatible
         main. It does not return anything as to avoid garbage collected C++ objects to ruin the program.
@@ -46,7 +48,7 @@ def clingo_thingies(stdout):
         return None, lambda: None
     clingo_main_plugin(next_plugin, arguments=["--help"])()
     out = stdout.getvalue()
-    test.startswith(out, "clingo+ version 5.7.1\nusage: clingo+ [number] [options] [files]\n\n")
+    test.startswith(out, "clingo+ version 5.8.0\nusage: clingo+ [number] [options] [files]\n\n")
 
 
 @test
@@ -56,7 +58,7 @@ def raise_errors_in_plugins(stdout):
     main = clingo_main_plugin(malicious_plugin, arguments=[])
     with test.raises(ValueError, "too many values to unpack (expected 2)"):
         main()
-    test.startswith(stdout.getvalue(), """clingo+ version 5.7.1
+    test.startswith(stdout.getvalue(), f"""clingo+ version {VERSION}
 Reading from stdin
 UNKNOWN""")
 
@@ -70,7 +72,7 @@ def raise_errors_in_main(stdout):
     main = clingo_main_plugin(malicious_plugin, arguments=[])
     with test.raises(ZeroDivisionError, "division by zero"):
         main()
-    test.startswith(stdout.getvalue(), """clingo+ version 5.7.1
+    test.startswith(stdout.getvalue(), f"""clingo+ version {VERSION}
 Reading from stdin
 UNKNOWN""")
 
@@ -88,7 +90,7 @@ def raise_exception_in_logger(stdout):
     main = clingo_main_plugin(plugin_raising_in_logger)
     with test.raises(TypeError, "oh no!"):
         main()
-    test.startswith(stdout.getvalue(), "clingo+ version 5.7.1")
+    test.startswith(stdout.getvalue(), "clingo+ version 5.8.0")
 
 
 @test
