@@ -19,6 +19,9 @@ import selftest
 test = selftest.get_tester(__name__)
 
 
+VERSION = '.'.join(map(str,clingo.version()))
+
+
 def spawn_clingo_plus(input="", arguments=[]):
     path = pathlib.Path(__file__).parent
     p = subprocess.run(["python", "-c", f"from asp_selftest.__main__ import clingo_plus; clingo_plus()"] + arguments,
@@ -44,14 +47,14 @@ def maybe_shutup_selftest(argv):
 def main_entry_point_basics():
     p = spawn_clingo_plus(input=b"skaludicat. #program test_gotashparot(base).", arguments=['--run-asp-tests'])
     test.eq(b'', p.stderr)
-    test.startswith(p.stdout.decode(), """\
-clingo+ version 5.7.1
+    test.startswith(p.stdout.decode(), f"""\
+clingo+ version {VERSION}
 Reading from stdin
 Testing stdin
   base()
   test_gotashparot(base)
 Solving...
-Answer: 1
+Answer: 1 (Time: 0.001s)
 skaludicat
 SATISFIABLE
 
@@ -61,7 +64,7 @@ Models""", diff=test.diff)
 @test
 def simple_syntax_error_with_clingo_main():
     p = spawn_clingo_plus(b'plugin(".:errorplugin"). a', arguments=['--run-asp-tests'])
-    test.startswith(p.stdout, b'clingo+ version 5.7.1\nReading from stdin\nUNKNOWN')
+    test.startswith(p.stdout, f'clingo+ version {VERSION}\nReading from stdin\nUNKNOWN'.encode())
     traceback = p.stderr
     should = b"""-stdin.lp", line 2
     1 plugin(".:errorplugin"). a
@@ -80,12 +83,12 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout, stderr):
     argv += [f.as_posix(), '--run-python-tests']  # we can not NOT run the Python tests here
     clingo_plus()
     s = iter(stdout.getvalue().splitlines())
-    test.eq('clingo+ version 5.7.1', next(s))
+    test.eq(f'clingo+ version {VERSION}', next(s))
     l = next(s)
     test.startswith(l, 'Reading from')
     test.endswith(l, 'f.lp')
     test.eq('Solving...', next(s))
-    test.eq('Answer: 1', next(s))
+    test.eq('Answer: 1 (Time: 0.000s)', next(s))
     test.eq('a', next(s))
     test.eq('SATISFIABLE', next(s))
     test.eq('', next(s))
@@ -186,11 +189,11 @@ models(1).
 def bug_read_stdin_and_solve_with_run_tests():
     # solving was prevented because stdin was read by the tester and gone for the next step
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-python-tests'])
-    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
+    test.contains(p.stdout, b"Answer: 1 (Time: 0.001s)\na b c\nSATISFIABLE\n")
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=[])
-    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
+    test.contains(p.stdout, b"Answer: 1 (Time: 0.001s)\na b c\nSATISFIABLE\n")
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-python-tests', '--run-asp-tests'])
-    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
+    test.contains(p.stdout, b"Answer: 1 (Time: 0.001s)\na b c\nSATISFIABLE\n")
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-asp-tests'])
-    test.contains(p.stdout, b"Answer: 1\na b c\nSATISFIABLE\n")
+    test.contains(p.stdout, b"Answer: 1 (Time: 0.001s)\na b c\nSATISFIABLE\n")
     test.eq(b'', p.stderr)

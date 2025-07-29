@@ -76,8 +76,12 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
                         for model in models:
                             if failures := list(model.context.symbolic_atoms.by_signature('cannot', 1)):
                                 e = AssertionError(', '.join(str(f.symbol) for f in failures))
-                                e.add_note(f"File {filename}, line {lineno}, in {fulltestname}.")
-                                e.add_note("Model:\n" + format_symbols(s for s in model.symbols(shown=True) if s.name != 'cannot'))
+                                e.add_note(f"File {filename}, line {lineno}, in {fulltestname}. Model follows.")
+                                symbols = '  '.join(
+                                        str(s) for s in model.symbols(shown=True)
+                                        if s.name != 'cannot' and not s.name.startswith('_'))
+                                e.add_note(symbols or '<empty model>')
+                                #e.add_note("Model:\n" + format_symbols(s for s in model.symbols(shown=True) if s.name != 'cannot'))
                                 raise e
                 finally:
                     print(flush=True)
@@ -115,7 +119,7 @@ def testrunner_plugin_basics(tmp_path, stdout):
     main_control = clingo.Control()
     with test.raises(AssertionError, 'cannot("I fail")') as e:
         load(main_control, files=(testfile,))
-    test.eq(e.exception.__notes__[0], f"File {testfile}, line 1, in test_a().")
+    test.eq(e.exception.__notes__[0], f"File {testfile}, line 1, in test_a(). Model follows.")
     test.eq(stdout.getvalue(), f"Testing {testfile}\n  base()\n  test_a()\n")
 
 
@@ -244,46 +248,38 @@ def format_empty_model(stderr, stdout):
     #""")
     notes = e.exception.__notes__
     test.startswith(notes[0], "File ")
-    test.endswith(notes[0], ", line 2, in test_model_formatting().")
-    test.eq(notes[1], "Model:\n<empty>")
+    test.endswith(notes[0], ", line 2, in test_model_formatting(). Model follows.")
+    test.eq(notes[1], "<empty model>")
 
 
 @test
 def format_model_small(stderr, stdout):
-    import unittest.mock as mock
-    with mock.patch("shutil.get_terminal_size", lambda _: (37,20)):
-        with test.raises(AssertionError) as e:
-            parse_and_run_tests("""
-                #program test_model_formatting.
-                this_is_a_fact(1..2).
-                #external what.
-                cannot(test) :- not what.
-            """)
+    with test.raises(AssertionError) as e:
+        parse_and_run_tests("""
+            #program test_model_formatting.
+            this_is_a_fact(1..2).
+            #external what.
+            cannot(test) :- not what.
+        """)
     notes = e.exception.__notes__
     test.startswith(notes[0], "File ")
-    test.endswith(notes[0], ", line 2, in test_model_formatting().")
-    test.eq(notes[1], """Model:
-this_is_a_fact(1)
-this_is_a_fact(2)""")
+    test.endswith(notes[0], ", line 2, in test_model_formatting(). Model follows.")
+    test.eq(notes[1], """this_is_a_fact(1)  this_is_a_fact(2)""")
 
 
 @test
 def format_model_wide(stderr, stdout):
-    import unittest.mock as mock
-    with mock.patch("shutil.get_terminal_size", lambda _: (50,20)):
-        with test.raises(AssertionError) as e:
-            parse_and_run_tests("""
-                #program test_model_formatting.
-                this_is_a_fact(1..3).
-                #external what.
-                cannot(test) :- not what.
-            """)
+    with test.raises(AssertionError) as e:
+        parse_and_run_tests("""
+            #program test_model_formatting.
+            this_is_a_fact(1..3).
+            #external what.
+            cannot(test) :- not what.
+        """)
     notes = e.exception.__notes__
     test.startswith(notes[0], "File ")
-    test.endswith(notes[0], ", line 2, in test_model_formatting().")
-    test.eq(notes[1], """Model:
-this_is_a_fact(1)  this_is_a_fact(2)
-this_is_a_fact(3)""")
+    test.endswith(notes[0], ", line 2, in test_model_formatting(). Model follows.")
+    test.eq(notes[1], """this_is_a_fact(1)  this_is_a_fact(2)  this_is_a_fact(3)""")
 
 
 @test
