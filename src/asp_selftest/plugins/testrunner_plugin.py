@@ -32,8 +32,49 @@ def gather_tests(files, logger):
     def _logger(code, message):
         if code != clingo.MessageCode.FileIncluded:
             logger(code, message)
+
     clingo.ast.parse_files(files, callback=_filter_program, logger=_logger)
     return reversed(all_tests.items())
+
+
+def prepare_test_files(files):
+    """Prepare test files, reading from stdin if no files are provided."""
+    if not files:
+        with open(os.dup(0)) as f:  # read from stdin without removing the data
+            asp_code = f.read()
+        with tempfile.NamedTemporaryFile('w', suffix='-stdin.lp') as stdin_data:
+            print(asp_code, file=stdin_data, flush=True)
+            return [stdin_data.name]
+    return files
+
+
+def check_model(model, filename, lineno, fulltestname):
+    by_signature = model.context.symbolic_atoms.by_signature
+    if failures := [s for s in by_signature('cannot', 1) if model.is_true(s.literal)]: # TODO find test for is_true!
+        e = AssertionError(', '.join(str(f.symbol) for f in failures))
+        e.add_note(f"File {filename}, line {lineno}, in {fulltestname}. Model follows.")
+        symbols = '\n'.join(
+                str(s) for s in model.symbols(shown=True)
+                if s.name != 'cannot' and not s.name.startswith('_'))
+        e.add_note(symbols or '<empty model>')
+        raise e
+
+def run_tests(test_info, sub_control, next_plugin):
+    testname, (dependencies, lineno) = test_info
+    fulltestname = f"{testname}({', '.join(dependencies)})"
+    parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
+    print(" ", fulltestname, end='', flush=True)
+
+    sub_logger, sub_load, sub_ground, sub_solve = next_plugin(logger=logger, arguments=new_args, context=context, **etc)
+    #sub_control = clingo.Control(arguments=new_args, logger=logger)
+
+    sub_load(sub_control, files=(filename,))
+    sub_ground(sub_control, parts=parts, context=context)
+
+    with sub_solve(sub_control, yield_=True) as models:
+        for model in models:
+            check_model(model, filename, lineno, fulltestname)
+
 
 
 def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=None, **etc):
@@ -46,43 +87,24 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
         **etc)
 
     def load(control, files):
-        stdin_tmp_file_name = None
-        if not files:
-            asp_code = open(os.dup(0)).read()  # read from stdin without removing the data  #TODO REMOVE
-            stdin_data = tempfile.NamedTemporaryFile('w', suffix='-stdin.lp')
-            print(asp_code, file=stdin_data, flush=True)
-            stdin_tmp_file_name = stdin_data.name
-            files = [stdin_tmp_file_name]
+        files = prepare_test_files(files)
         for filename, tests in gather_tests(files, logger):
             print("Testing", 'stdin' if filename.endswith('-stdin.lp') else filename)
-            tests_per_file = [('base', ((), 1)), *tests.items()]
                         
-            for testname, (dependencies, lineno) in tests_per_file:
+            for testname, (dependencies, lineno) in [('base', ((), 1)), *tests.items()]:
+                new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
+                sub_control = clingo.Control(arguments=new_args, logger=logger)
+                sub_logger, sub_load, sub_ground, sub_solve = next(logger=logger, arguments=new_args, context=context, **etc)
+
                 fulltestname = f"{testname}({', '.join(dependencies)})"
-                parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
                 print(" ", fulltestname, end='', flush=True)
-
                 try:
-                    new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
-                    sub_logger, sub_load, sub_ground, sub_solve = next(logger=logger, arguments=new_args, context=context, **etc)
-                    sub_control = clingo.Control(
-                        arguments=new_args,
-                        logger=logger)
-
                     sub_load(sub_control, files=(filename,))
+                    parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
                     sub_ground(sub_control, parts=parts, context=context)
-
                     with sub_solve(sub_control, yield_=True) as models:
                         for model in models:
-                            if failures := list(model.context.symbolic_atoms.by_signature('cannot', 1)):
-                                e = AssertionError(', '.join(str(f.symbol) for f in failures))
-                                e.add_note(f"File {filename}, line {lineno}, in {fulltestname}. Model follows.")
-                                symbols = '  '.join(
-                                        str(s) for s in model.symbols(shown=True)
-                                        if s.name != 'cannot' and not s.name.startswith('_'))
-                                e.add_note(symbols or '<empty model>')
-                                #e.add_note("Model:\n" + format_symbols(s for s in model.symbols(shown=True) if s.name != 'cannot'))
-                                raise e
+                            check_model(model, filename, lineno, fulltestname)
                 finally:
                     print(flush=True)
 
@@ -264,7 +286,7 @@ def format_model_small(stderr, stdout):
     notes = e.exception.__notes__
     test.startswith(notes[0], "File ")
     test.endswith(notes[0], ", line 2, in test_model_formatting(). Model follows.")
-    test.eq(notes[1], """this_is_a_fact(1)  this_is_a_fact(2)""")
+    test.eq(notes[1], """this_is_a_fact(1)\nthis_is_a_fact(2)""")
 
 
 @test
@@ -279,7 +301,7 @@ def format_model_wide(stderr, stdout):
     notes = e.exception.__notes__
     test.startswith(notes[0], "File ")
     test.endswith(notes[0], ", line 2, in test_model_formatting(). Model follows.")
-    test.eq(notes[1], """this_is_a_fact(1)  this_is_a_fact(2)  this_is_a_fact(3)""")
+    test.eq(notes[1], """this_is_a_fact(1)\nthis_is_a_fact(2)\nthis_is_a_fact(3)""")
 
 
 @test
