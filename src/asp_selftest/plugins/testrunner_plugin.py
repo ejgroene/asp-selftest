@@ -88,32 +88,27 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
 
     def load(control, files):
         files = prepare_test_files(files)
-        # each file has its own 'base' part (which we want to run later, all together)
 
+        def verify_cannots(filename, testname, dependencies, lineno):
+            sub_control = clingo.Control(arguments=new_args, logger=logger)
+            sub_logger, sub_load, sub_ground, sub_solve = next(logger=logger, arguments=new_args, context=context, **etc)
+            fulltestname = f"{testname}({', '.join(dependencies)})"
+            print(" ", fulltestname, end='', flush=True)
+            try:
+                sub_load(sub_control, files=(filename,))
+                parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
+                sub_ground(sub_control, parts=parts, context=context)
+                with sub_solve(sub_control, yield_=True) as models:
+                    for model in models:
+                        check_model(model, filename, lineno, fulltestname)
+            finally:
+                print(flush=True)
+            
         for filename, tests in gather_tests(files, logger):
-            # gather_tests only collects "#program test_" parts (no base stuff)
-
             print("Testing", 'stdin' if filename.endswith('-stdin.lp') else filename)
-
-            # this must only run the tests programs in each file
-            # so we'll remove ('base', ((), 1)) in the next line
-            # 'base' was used as a test synthetic name
             new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
             for testname, (dependencies, lineno) in [('base', ((), 1)), *tests.items()]:
-                sub_control = clingo.Control(arguments=new_args, logger=logger)
-                sub_logger, sub_load, sub_ground, sub_solve = next(logger=logger, arguments=new_args, context=context, **etc)
-
-                fulltestname = f"{testname}({', '.join(dependencies)})"
-                print(" ", fulltestname, end='', flush=True)
-                try:
-                    sub_load(sub_control, files=(filename,))
-                    parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
-                    sub_ground(sub_control, parts=parts, context=context)
-                    with sub_solve(sub_control, yield_=True) as models:
-                        for model in models:
-                            check_model(model, filename, lineno, fulltestname)
-                finally:
-                    print(flush=True)
+                verify_cannots(filename, testname, dependencies, lineno)
 
         _load(control, files)
 
