@@ -88,11 +88,18 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
 
     def load(control, files):
         files = prepare_test_files(files)
+        # each file has its own 'base' part (which we want to run later, all together)
+
         for filename, tests in gather_tests(files, logger):
+            # gather_tests only collects "#program test_" parts (no base stuff)
+
             print("Testing", 'stdin' if filename.endswith('-stdin.lp') else filename)
-                        
+
+            # this must only run the tests programs in each file
+            # so we'll remove ('base', ((), 1)) in the next line
+            # 'base' was used as a test synthetic name
+            new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
             for testname, (dependencies, lineno) in [('base', ((), 1)), *tests.items()]:
-                new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
                 sub_control = clingo.Control(arguments=new_args, logger=logger)
                 sub_logger, sub_load, sub_ground, sub_solve = next(logger=logger, arguments=new_args, context=context, **etc)
 
@@ -348,3 +355,14 @@ def run_tests_flag(stdout):
         parse_and_run_tests(code, run_tests=False)
     test.eq('', out.getvalue())
 
+
+@test
+def all_bases_are_one():
+    """ Do not process 'cannot's in the 'base' parts seperately but with all
+        bases combined. Such 'cannot's are usually prerequisites for the logic
+        to work properly. The logic needs certain inputs which come from other
+        base parts.
+        This means that the cannots in the base parts are only evaluated on
+        the top level, i.e. not while running the tests in the individually
+        included files.
+    """
