@@ -16,4 +16,4 @@ edge(x, y).
 % The edge above implies nodes x and y, check it.
 cannot("node x")  :-  not node(x).
 cannot("node y")  :-  not node(y).
-cannot("node z")  :-  not node(z).  % fails
+cannot("node z")  :-  node(z).  % fails

@@ -29,45 +29,66 @@ cannot("node y")  :-  not node(y).
 cannot("node z")  :-  not node(z).  % fails
 ````
 
-The test contains three `cannot` predicates. Think of these as **inverted asserts** (more on this later).
+The test contains three `cannot` predicates. Think of these as **inverted asserts** (more on this later). Let's run the tests:
 
-It also contains one `cannot` in the (implicit) `base`-part of the program. If we run it, this one fails first:
-
-```shell
-$ clingo+ logic.lp --run-asp-tests
-...
-Testing logic.lp
-  base()
-...
-AssertionError: cannot("at least one edge")
-File test.lp, line 1, in base().
-Model:
-<empty>
-```
-
-Oops, we forgot to add edges, so let's add `edges.lp`:
 
 ```shell
-$ clingo+ logic.lp edges.lp --run-asp-tests
+$ clingo+ nodes.lp --run-asp-tests
 ...
-Testing logic.lp
-  base()
+Reading from nodes.lp
+Testing nodes.lp
   test_edge_leads_to_nodes(base)
 ...
 AssertionError: cannot("node z")
-File logic.lp, line 6, in test_edge_leads_to_nodes(base). Model follows.
+File nodes.lp, line 11, in test_edge_leads_to_nodes(base). Model follows.
 edge(x,y)
 node(x)
 node(y)
 ```
 
-Now `base` is OK, but the test fails. We can fix that by removing `not` from the lastt `cannot`:
+The test fails. We can fix that by removing `not` from the last `cannot`:
 
 ```prolog
 cannot("node z")  :-  node(z).
-````
+```
 
-As custom with in-source unit testing, it fails fast: it quits on the first failure.
+It also contains one `cannot` in the (implicit) `base`-part of the program. Once all the unit test succeed, this one fails:
+
+
+```shell
+$ clingo+ nodes.lp --run-asp-tests
+...
+Reading from nodes.lp
+Testing nodes.lp
+  test_edge_leads_to_nodes(base)
+Testing base
+  base
+...
+AssertionError: cannot("at least one edge")
+File nodes.lp, line ?, in base. Model follows.
+<empty model>
+```
+
+Let's add `edges.lp`, which defines edges, and run it again:
+
+
+```shell
+$ clingo+ nodes.lp edges.lp --run-asp-tests
+...
+Reading from nodes.lp ...
+Testing nodes.lp
+  test_edge_leads_to_nodes(base)
+Testing edges.lp
+Testing base
+  base
+Solving...
+Answer: 1 (Time: 0.003s)
+edge(a,b) node(b) node(a)
+SATISFIABLE
+```
+
+Now all prerequisites are met and the solver does it's job.
+
 
 
 ## Test Dependencies
@@ -114,9 +135,9 @@ The use of `cannot` instead of a positive `assert` might seem counter intuitive,
 
 Constraints have no head and must alway be false. If yet it becomes true, the ASP runtime considers the model invalid. 
 
-We use `cannot` as the head for a constraint. Now when it becomes true, the runtime will ignore it, and it will just end up in the model.
+I can be helpful to read a constraint as: *it cannot be the case that...*.  Hence the name `cannot`.
 
-It is helpful to read `cannot` as _it cannot be the case that..._.  
+We use `cannot` as the head for a constraint. Now when it becomes true, the runtime will ignore it, and it will just end up in the model.
 
 This can be seen when running the example above without `--run-asp-tests`:
 

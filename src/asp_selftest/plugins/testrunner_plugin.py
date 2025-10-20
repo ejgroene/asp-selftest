@@ -95,7 +95,7 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
                 verify_cannots((filename,), fulltestname, parts, lineno)
 
         print("Testing base")
-        verify_cannots(files, 'base', (('base', ()),), None) # TODO locate failing cannot: file/lineno??
+        verify_cannots(files, 'base', (('base', ()),), '?') # TODO locate failing cannot: file/lineno??
 
         _load(control, files)
 
