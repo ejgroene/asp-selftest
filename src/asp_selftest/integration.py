@@ -58,7 +58,7 @@ def ground_simple(stdout):
     control = ground_exc(source="a. b.")
     test.isinstance(control, clingo.Control)
     test.eq(['a', 'b'], list_symbols(control))
-    test.endswith(stdout.getvalue(), "-string.lp\n  base()\n")
+    test.endswith(stdout.getvalue(), "-string.lp\nTesting base\n  base\n")
 
 
 @test
@@ -68,8 +68,8 @@ def ground_files(tmp_path, stdout):
     control = ground_exc(files=(f1, f2))
     test.eq(['f(1)', 'f(2)'], list_symbols(control))
     out = stdout.getvalue()
-    test.contains(out, "/f1\n  base()\n")
-    test.contains(out, "/f2\n  base()\n")
+    test.contains(out, "/f1\nTesting ")
+    test.contains(out, "/f2\nTesting base\n  base\n")
 
 
 @test
@@ -80,7 +80,7 @@ def ground_with_observer(stdout):
             atoms[atom] = symbol
     ground_exc(source="a.", observer=MyObserver())
     test.eq({0: clingo.Function('a', [], True)}, atoms)
-    test.endswith(stdout.getvalue(), "-string.lp\n  base()\n")
+    test.endswith(stdout.getvalue(), "-string.lp\nTesting base\n  base\n")
 
 
 @test
@@ -90,7 +90,7 @@ def pass_arguments_to_control(stdout):
     test.endswith(stderr.getvalue(), "-string.lp:1:6-7: info: atom does not occur in any rule head:\n  b\n\n")
     c = ground_exc(source="c. a :- b.", arguments=['--warn', 'no-atom-undefined'])
     test.eq(['c'], list_symbols(c))
-    test.eq(2, stdout.getvalue().count("-string.lp\n  base()\n"))
+    test.eq(2, stdout.getvalue().count("-string.lp\nTesting base\n  base\n"))
 
 
 @test
@@ -104,7 +104,7 @@ def raise_syntaxerror():
 def has_reify(stdout):
     c = ground_exc(source="b. rule(a, b).")
     test.eq(['b', 'a', 'rule(a,b)'], list_symbols(c))
-    test.endswith(stdout.getvalue(), "-string.lp\n  base()\n")
+    test.endswith(stdout.getvalue(), "-string.lp\nTesting base\n  base\n")
 
 
 @test
@@ -116,8 +116,8 @@ def include_path(tmp_path, stdout):
     after = os.environ.get('CLINGOPATH', 'nope')
     test.eq(before, after)
     out = stdout.getvalue()
-    test.contains(out, "/inc.lp\n  base()\n")
-    test.endswith(out, "-string.lp\n  base()\n")
+    test.contains(out, "/inc.lp\nTesting ")
+    test.endswith(out, "-string.lp\nTesting base\n  base\n")
 
 
 class ContextA:

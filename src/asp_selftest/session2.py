@@ -143,7 +143,7 @@ def test_session2_not_wat(stdout):
     with solve_handle as result:
         for model in result:
             test.eq('a b c(a)', str(model))
-    test.endswith(stdout.getvalue(), "-string.lp\n  base()\n")
+    test.endswith(stdout.getvalue(), "-string.lp\nTesting base\n  base\n")
 
 
 @test
@@ -152,4 +152,4 @@ def session_with_file(tmp_path, stdout):
     file1.write_text('test(1).')
     solveresult = clingo_session(files=(file1.as_posix(),))
     test.truth(solveresult.satisfiable)
-    test.endswith(stdout.getvalue(), "test.lp\n  base()\n")
+    test.endswith(stdout.getvalue(), "test.lp\nTesting base\n  base\n")

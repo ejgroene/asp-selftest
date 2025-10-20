@@ -51,8 +51,9 @@ def main_entry_point_basics():
 clingo+ version {VERSION}
 Reading from stdin
 Testing stdin
-  base()
   test_gotashparot(base)
+Testing base
+  base
 Solving...
 Answer: 1 (Time: 0.001s)
 skaludicat
@@ -128,7 +129,7 @@ def tester_runs_tests(tmp_path, argv, stdout, stderr):
     """)
     argv += [f.as_posix(), '--run-asp-tests', '--run-python-tests']
     clingo_plus()
-    test.contains(stdout.getvalue(), f"Testing {f}\n  base()\n  test_fact(base)\n")
+    test.contains(stdout.getvalue(), f"Testing {f}\n  test_fact(base)\nTesting base\n  base\n")
     test.startswith(stderr.getvalue(), "")
 
 
@@ -147,7 +148,7 @@ def clingo_dropin_default_hook_tests(tmp_path, argv, stdout, stderr):
     argv += [f.as_posix(), '--run-asp-tests', '--run-python-tests']
     clingo_plus()
     s = stdout.getvalue()
-    test.contains(s, f"Testing {f}\n  base()\n  test_fact_1(base)\n  test_fact_2(base)\n")
+    test.contains(s, f"Testing {f}\n  test_fact_1(base)\n  test_fact_2(base)\nTesting base\n  base\n")
     test.startswith(stderr.getvalue(), "")
 
 
@@ -181,7 +182,7 @@ models(1).
     argv += [f.as_posix(), '--run-asp-tests', '--run-python-tests']
     clingo_plus()
     s = stdout.getvalue()
-    test.contains(s, f"Testing {f}\n  base()\n  test_one()\n")
+    test.contains(s, f"Testing {f}\n  test_one()\n")
     test.startswith(stderr.getvalue(), "")
 
 

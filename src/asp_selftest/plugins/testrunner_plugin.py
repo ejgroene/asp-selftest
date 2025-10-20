@@ -48,33 +48,16 @@ def prepare_test_files(files):
     return files
 
 
-def check_model(model, filename, lineno, fulltestname):
+def check_model(model, errornote):
     by_signature = model.context.symbolic_atoms.by_signature
     if failures := [s for s in by_signature('cannot', 1) if model.is_true(s.literal)]: # TODO find test for is_true!
         e = AssertionError(', '.join(str(f.symbol) for f in failures))
-        e.add_note(f"File {filename}, line {lineno}, in {fulltestname}. Model follows.")
+        e.add_note(f"{errornote}. Model follows.")
         symbols = '\n'.join(
                 str(s) for s in model.symbols(shown=True)
                 if s.name != 'cannot' and not s.name.startswith('_'))
         e.add_note(symbols or '<empty model>')
         raise e
-
-def run_tests(test_info, sub_control, next_plugin):
-    testname, (dependencies, lineno) = test_info
-    fulltestname = f"{testname}({', '.join(dependencies)})"
-    parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
-    print(" ", fulltestname, end='', flush=True)
-
-    sub_logger, sub_load, sub_ground, sub_solve = next_plugin(logger=logger, arguments=new_args, context=context, **etc)
-    #sub_control = clingo.Control(arguments=new_args, logger=logger)
-
-    sub_load(sub_control, files=(filename,))
-    sub_ground(sub_control, parts=parts, context=context)
-
-    with sub_solve(sub_control, yield_=True) as models:
-        for model in models:
-            check_model(model, filename, lineno, fulltestname)
-
 
 
 def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=None, **etc):
@@ -89,26 +72,30 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
     def load(control, files):
         files = prepare_test_files(files)
 
-        def verify_cannots(filename, fulltestname, parts, lineno):
+        def verify_cannots(filenames, fulltestname, parts, lineno):
             sub_control = clingo.Control(arguments=new_args, logger=logger)
             sub_logger, sub_load, sub_ground, sub_solve = next(logger=logger, arguments=new_args, context=context, **etc)
             print(" ", fulltestname, end='', flush=True)
             try:
-                sub_load(sub_control, files=(filename,))
+                sub_load(sub_control, files=filenames)
                 sub_ground(sub_control, parts=parts, context=context)
                 with sub_solve(sub_control, yield_=True) as models:
                     for model in models:
-                        check_model(model, filename, lineno, fulltestname)
+                        errornote = f"File {','.join(filenames)}, line {lineno}, in {fulltestname}"
+                        check_model(model, errornote)
             finally:
                 print(flush=True)
             
         for filename, tests in gather_tests(files, logger):
             print("Testing", 'stdin' if filename.endswith('-stdin.lp') else filename)
             new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
-            for testname, (dependencies, lineno) in [('base', ((), 1)), *tests.items()]:
+            for testname, (dependencies, lineno) in tests.items():
                 parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
                 fulltestname = f"{testname}({', '.join(dependencies)})"
-                verify_cannots(filename, fulltestname, parts, lineno)
+                verify_cannots((filename,), fulltestname, parts, lineno)
+
+        print("Testing base")
+        verify_cannots(files, 'base', (('base', ()),), None) # TODO locate failing cannot: file/lineno??
 
         _load(control, files)
 
@@ -120,7 +107,8 @@ def tracing_clingo_plugin(trace=lambda x: None):
         trace(etc)
         def load(control, files):
             trace((control, files))
-            control.load(files[0])
+            for f in files:
+                control.load(f)
         def ground(control, parts, context=None):
             trace((control, parts, context))
             control.ground(parts=parts, context=context)
@@ -144,7 +132,7 @@ def testrunner_plugin_basics(tmp_path, stdout):
     with test.raises(AssertionError, 'cannot("I fail")') as e:
         load(main_control, files=(testfile,))
     test.eq(e.exception.__notes__[0], f"File {testfile}, line 1, in test_a(). Model follows.")
-    test.eq(stdout.getvalue(), f"Testing {testfile}\n  base()\n  test_a()\n")
+    test.eq(stdout.getvalue(), f"Testing {testfile}\n  test_a()\n")
 
 
 @test
@@ -159,7 +147,7 @@ def testrunner_plugin_no_failures(tmp_path, stdout):
 
     main_control = clingo.Control()
     load(main_control, files=(testfile,))
-    test.eq(stdout.getvalue(), f"Testing {testfile}\n  base()\n  test_a(base)\n")
+    test.eq(stdout.getvalue(), f"Testing {testfile}\n  test_a(base)\nTesting base\n  base\n")
 
     ground(main_control, parts=(('base', ()), ('test_a', ())))
     test.eq('a', str(next(main_control.symbolic_atoms.by_signature('a', 0)).symbol))
@@ -181,14 +169,13 @@ def run_tests_per_included_file_separately(tmp_path, stdout, stderr):
     out = stdout.getvalue()
     test.contains(out, f"""\
 Testing {part_b}
-  base()
   test_b()
 Testing {part_a}
-  base()
   test_a()
 Testing {part_c}
-  base()
-  test_c()""")
+  test_c()
+Testing base
+  base\n""")
 
 
 # TEST taken from runasptests.py
@@ -207,8 +194,28 @@ def parse_and_run_tests(asp_code, trace=lambda _:None, **etc):
 def cannot_in_base(stdout):
     with test.raises(AssertionError, 'cannot(fail)'):
         parse_and_run_tests("cannot(fail).")  # constraints in base
-    test.endswith(stdout.getvalue(), "/inputfile.lp\n  base()\n")
+    test.endswith(stdout.getvalue(), "/inputfile.lp\nTesting base\n  base\n")
+
+
+@test
+def cannot_in_base_in_multiple_files(tmp_path):
+    a = write_file(tmp_path/"a.lp", '#external b. cannot("need b") :- not b.')
+    b = write_file(tmp_path/"b.lp", 'b.')
+    _, load, ground, _ = testrunner_plugin(tracing_clingo_plugin())
+
+    ctl = clingo.Control()
+    try:
+        load(ctl, files=(a,))
+    except AssertionError as e:
+        test.eq('cannot("need b")', str(e))
+    else:
+        self.fail()
     
+    ctl = clingo.Control()
+    load(ctl, files=(a, b))
+    ground(ctl, (('base', ()),))
+    test.eq(['b'], [sa.symbol.name for sa in ctl.symbolic_atoms])
+
 
 @test
 def use_arguments_for_testing(stdout):
@@ -223,7 +230,7 @@ def use_arguments_for_testing(stdout):
         parse_and_run_tests(
             asp_program,
             arguments=['--const', 'a=99'])
-    test.endswith(stdout.getvalue(), "/inputfile.lp\n  base()\n")
+    test.endswith(stdout.getvalue(), "/inputfile.lp\nTesting base\n  base\n")
 
 
 
@@ -242,11 +249,15 @@ def use_context_when_running_tests(stdout):
         trace=trace.append)
     test.eq(mycontext, trace[0]['context'])
     n = 42
+    test.endswith(stdout.getvalue(), "/inputfile.lp\n  test_a_42()\nTesting base\n  base\n")
+    p = stdout.tell()
     with test.raises(AssertionError, "cannot(42)"):
         parse_and_run_tests(
             asp_program,
             context=MyContext())
-    test.endswith(stdout.getvalue(), "/inputfile.lp\n  base()\n  test_a_42()\n")
+    stdout.seek(p)
+    out = stdout.read()
+    test.endswith(out, "/inputfile.lp\n  test_a_42()\n")
     
         
 @test
@@ -338,7 +349,7 @@ def dependencies(stderr, stdout):
     """)
     test.eq('', stderr.getvalue())
     test.endswith(stdout.getvalue(),
-      "/inputfile.lp\n  base()\n  test_base(base)\n  test_one(base, one)\n")
+      "/inputfile.lp\n  test_base(base)\n  test_one(base, one)\nTesting base\n  base\n")
 
 
 @test
