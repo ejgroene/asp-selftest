@@ -54,8 +54,8 @@ Testing stdin
   test_gotashparot(base)
 Testing base
   base
-Solving...
-Answer: 1 (Time: 0.001s)
+Solving...""")
+    test.contains(p.stdout.decode(), f"""\
 skaludicat
 SATISFIABLE
 
@@ -89,7 +89,8 @@ def clingo_drop_in_plus_tests(tmp_path, argv, stdout, stderr):
     test.startswith(l, 'Reading from')
     test.endswith(l, 'f.lp')
     test.eq('Solving...', next(s))
-    test.eq('Answer: 1 (Time: 0.000s)', next(s))
+    #test.eq('Answer: 1 (Time: 0.000s)', next(s))
+    next(s)
     test.eq('a', next(s))
     test.eq('SATISFIABLE', next(s))
     test.eq('', next(s))
@@ -190,11 +191,15 @@ models(1).
 def bug_read_stdin_and_solve_with_run_tests():
     # solving was prevented because stdin was read by the tester and gone for the next step
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-python-tests'])
-    test.contains(p.stdout, b"Answer: 1 (Time: 0.001s)\na b c\nSATISFIABLE\n")
+    test.contains(p.stdout, b"Answer: 1 (Time: ")
+    test.contains(p.stdout, b"s)\na b c\nSATISFIABLE\n")
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=[])
-    test.contains(p.stdout, b"Answer: 1 (Time: 0.001s)\na b c\nSATISFIABLE\n")
+    test.contains(p.stdout, b"Answer: 1 (Time: ")
+    test.contains(p.stdout, b"s)\na b c\nSATISFIABLE\n")
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-python-tests', '--run-asp-tests'])
-    test.contains(p.stdout, b"Answer: 1 (Time: 0.001s)\na b c\nSATISFIABLE\n")
+    test.contains(p.stdout, b"Answer: 1 (Time: ")
+    test.contains(p.stdout, b"s)\na b c\nSATISFIABLE\n")
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-asp-tests'])
-    test.contains(p.stdout, b"Answer: 1 (Time: 0.001s)\na b c\nSATISFIABLE\n")
+    test.contains(p.stdout, b"Answer: 1 (Time: ")
+    test.contains(p.stdout, b"s)\na b c\nSATISFIABLE\n")
     test.eq(b'', p.stderr)

@@ -7,8 +7,6 @@ import sys
 import os
 
 import clingo
-from clingo.script import enable_python
-enable_python()
 
 from .plugins.misc import write_file, list_symbols
 

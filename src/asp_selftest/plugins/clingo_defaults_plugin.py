@@ -2,6 +2,11 @@
 import sys
 import clingo
 
+
+from clingo.script import enable_python
+enable_python()
+
+
 from .misc import write_file
 
 import selftest

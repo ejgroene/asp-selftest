@@ -1,6 +1,7 @@
 import sys
 import os
 import tempfile
+import timeit
 import collections
 import itertools
 import clingo.ast
@@ -69,12 +70,14 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
         context=context,
         **etc)
 
+    new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
+
     def load(control, files):
         files = prepare_test_files(files)
 
         def verify_cannots(filenames, fulltestname, parts, lineno):
-            sub_control = clingo.Control(arguments=new_args, logger=logger)
             sub_logger, sub_load, sub_ground, sub_solve = next(logger=logger, arguments=new_args, context=context, **etc)
+            sub_control = clingo.Control(arguments=new_args, logger=logger)
             print(" ", fulltestname, end='', flush=True)
             try:
                 sub_load(sub_control, files=filenames)
@@ -88,7 +91,6 @@ def testrunner_plugin(next, run_tests=True, logger=None, arguments=(), context=N
             
         for filename, tests in gather_tests(files, logger):
             print("Testing", 'stdin' if filename.endswith('-stdin.lp') else filename)
-            new_args=list(itertools.dropwhile(lambda p: not p.startswith('--'), arguments))
             for testname, (dependencies, lineno) in tests.items():
                 parts = [(testname, [NA for _ in dependencies]), *((d, []) for d in dependencies)]
                 fulltestname = f"{testname}({', '.join(dependencies)})"
@@ -363,12 +365,66 @@ def run_tests_flag(stdout):
 
 
 @test
-def all_bases_are_one():
-    """ Do not process 'cannot's in the 'base' parts seperately but with all
-        bases combined. Such 'cannot's are usually prerequisites for the logic
-        to work properly. The logic needs certain inputs which come from other
-        base parts.
-        This means that the cannots in the base parts are only evaluated on
-        the top level, i.e. not while running the tests in the individually
-        included files.
+def test_aspif_generation(tmp_path):
+    asp_program = 'a. #program b. b1.'
+    
+    # with part b grounded
+    aspif_file_1 = tmp_path/'test_1.aspif'
+    control = clingo.Control()
+    control.register_backend(clingo.control.BackendType.Aspif, aspif_file_1.as_posix())
+    control.add(asp_program)
+    control.ground((('base', ()), ('b', ())))
+    del control      # needed for flushing
+    test.eq('asp 1 0 0 incremental\n1 0 1 1 0 0\n1 0 1 2 0 0\n4 1 a 0\n4 2 b1 0\n', aspif_file_1.read_text())
+
+    # only base grounded
+    aspif_file_2 = tmp_path/'test_2.aspif'
+    control = clingo.Control()
+    control.register_backend(clingo.control.BackendType.Aspif, aspif_file_2.as_posix())
+    control.add(asp_program)
+    control.ground((('base', ()), ))
+    del control      # needed for flushing
+    test.eq('asp 1 0 0 incremental\n1 0 1 1 0 0\n4 1 a 0\n', aspif_file_2.read_text())
+
+
+#@test
+def test_aspif_performance_gain(tmp_path):
+    """ This test shows that the overhead of ASPIF is too large to
+        be useful for caching, unless maybe if the grounding is
+        really complicated.
     """
+    aspif_file_1 = tmp_path/'test_1.aspif'
+    dummy = tmp_path/'dummy.aspif'
+    asp_program = 'a(1..100000).'
+    """ ground times:
+        vanilla:        42 ms <= improve on this!
+        write aspif:   145       145 + 114 = 259
+        aspif/replace: 107 
+        read aspif:    114
+    """
+    def create_control():
+        control = clingo.Control()
+        control.add(asp_program)
+        control.ground()
+        del control
+    n, t = timeit.Timer(create_control).autorange(print)
+    print("TIME:", t/n * 1000, 'ms')
+    def create_control():
+        control = clingo.Control()
+        control.register_backend(clingo.control.BackendType.Aspif, aspif_file_1.as_posix(), replace=True)
+        control.add(asp_program)
+        control.ground()
+        control.solve()
+        del control
+    n, t = timeit.Timer(create_control).autorange(print)
+    print("TIME:", t/n * 1000, 'ms')
+    os.sync()
+    test.eq(3077814, os.stat(aspif_file_1).st_size)
+    def create_control():
+        control = clingo.Control()
+        control.load_aspif((aspif_file_1.as_posix(),))
+        del control
+    n, t = timeit.Timer(create_control).autorange(print)
+    print("TIME:", t/n * 1000, 'ms')
+        
+        
