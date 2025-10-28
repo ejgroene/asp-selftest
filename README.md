@@ -1,3 +1,5 @@
+(Moved from github to Codeberg.)
+
 # asp-selftest
 
 In-source unit testing for **Answer Set Programming** (ASP).
