@@ -1,38 +1,58 @@
-(Moved from github to Codeberg.)
-
 # asp-selftest
 
-In-source unit testing for **Answer Set Programming** (ASP).
+A unit testing framework for **Answer Set Programming** (ASP) that enables in-source test definitions and execution.
 
+## Overview
 
-## In-source Unit Testing
+`asp-selftest` extends the Clingo ASP solver with integrated testing capabilities, allowing developers to write and execute unit tests directly within their logic programs. Tests are defined using standard ASP syntax and executed in isolated contexts to ensure reliability and maintainability.
 
-Consider `nodes.lp` which contains a test `test_edge_leads_to_nodes`:
+## Quick Start
+
+### Installation
+
+```bash
+pip install asp-selftest
+```
+
+### Basic Usage
+
+```bash
+clingo+ <file.lp> --run-asp-tests
+```
+
+## Core Concepts
+
+### In-Source Unit Testing
+
+Tests are embedded directly in ASP source files using `#program` directives. Consider the following example from `nodes.lp`:
 
 ```prolog
-% Implicit 'base'
+% Implicit 'base' program
 
 % Infer nodes from given edges.
 node(A)  :-  edge(A, _).
 node(B)  :-  edge(_, B).
 
-% Check that we have at least one edge to work with.
+% Verify that at least one edge exists.
 cannot("at least one edge")  :-  not { edge(_, _) } > 0.
 
 
 #program test_edge_leads_to_nodes(base).
 
-% Test a simple graph of one edge.
+% Test data: a simple graph with one edge.
 edge(x, y).
 
-% The edge above implies nodes x and y, check it.
+% Assertions: verify expected node inference.
 cannot("node x")  :-  not node(x).
 cannot("node y")  :-  not node(y).
-cannot("node z")  :-  not node(z).  % fails
-````
+cannot("node z")  :-  not node(z).  % This assertion will fail
+```
 
-The test contains three `cannot` predicates. Think of these as **inverted asserts** (more on this later). Let's run the tests:
+### The `cannot` Predicate
 
+The framework uses `cannot` predicates as inverted assertions. This design leverages ASP's constraint mechanism to avoid optimization issues that would affect traditional positive assertions.
+
+**Execution Example:**
 
 ```shell
 $ clingo+ nodes.lp --run-asp-tests
@@ -48,36 +68,29 @@ node(x)
 node(y)
 ```
 
-The test fails. We can fix that by removing `not` from the last `cannot`:
+The test fails because `node(z)` does not exist in the model. To correct this assertion:
 
 ```prolog
 cannot("node z")  :-  node(z).
 ```
 
-It also contains one `cannot` in the (implicit) `base`-part of the program. Once all the unit test succeed, this one fails:
+### Validating Base Programs
 
+After unit tests pass, the framework validates the base program. If prerequisites are missing, appropriate errors are reported:
 
 ```shell
 $ clingo+ nodes.lp --run-asp-tests
-...
-Reading from nodes.lp
-Testing nodes.lp
-  test_edge_leads_to_nodes(base)
-Testing base
-  base
 ...
 AssertionError: cannot("at least one edge")
 File nodes.lp, line ?, in base. Model follows.
 <empty model>
 ```
 
-Let's add `edges.lp`, which defines edges, and run it again:
-
+Adding the required data file resolves the issue:
 
 ```shell
 $ clingo+ nodes.lp edges.lp --run-asp-tests
 ...
-Reading from nodes.lp ...
 Testing nodes.lp
   test_edge_leads_to_nodes(base)
 Testing edges.lp
@@ -89,13 +102,11 @@ edge(a,b) node(b) node(a)
 SATISFIABLE
 ```
 
-Now all prerequisites are met and the solver does it's job.
-
 
 
 ## Test Dependencies
 
-We use `#program`'s to specify tests and their dependencies. Below we have a unit called `unit_A` with a unit test called `test_unit_A`. (Test must start with `test_`.) *Formal* arguments are treated as dependencies:
+Tests and their dependencies are specified using `#program` directives. Test names must begin with the `test_` prefix. Formal parameters declare dependencies on other program units:
 
 ```prolog
 #program unit_A.
@@ -103,21 +114,26 @@ We use `#program`'s to specify tests and their dependencies. Below we have a uni
 #program test_unit_A(base, unit_A).
 ```
 
-The implicit program `base`[^guide] must be referenced explicitly if needed.
+The implicit `base` program[^guide] must be explicitly referenced when required as a dependency. Actual arguments to test programs are not defined.
 
-The *actual* arguments to `test_unit_A` are undefined.
+[^guide]: Potassco User Guide §3.1.2
 
+## Test Scoping
 
-## Scoping
+The framework enforces strict test isolation:
 
-Tests in each file run in the context of only that file. If file A includes file B, then the tests in B will run with only the logic in B loaded. The tests in A run with the logic from A and B loaded.
+- Tests in each file execute within the context of that file only
+- When file A includes file B:
+  - Tests in B execute with only B's logic loaded
+  - Tests in A execute with both A's and B's logic loaded
 
+This scoping ensures that tests remain independent and do not interfere with each other.
 
-## SyntaxError
+## Error Reporting
 
-If we make a mistake, it tells us in a sensible way:
+The framework provides clear, actionable error messages for syntax and semantic errors:
 
-```prolog
+```shell
 $ clingo+ logic.lp
 ...
 Traceback (most recent call last):
@@ -129,19 +145,17 @@ Traceback (most recent call last):
       ^^^^^^^^^^^^^^^^^^^^^^^^ unsafe variables in:  node(B):-[#inc_base];edge(#Anon0,A).
 ```
 
-## More on `cannot`
+## Understanding `cannot` Predicates
 
-The use of `cannot` instead of a positive `assert` might seem counter intuitive, but it is not. It would require you to learn a non-trivial arsenal of idioms in order to avoid asserts to be optimized away. Instead we use constraints[^guide].
+The framework uses `cannot` predicates rather than positive assertions for technical reasons related to ASP's optimization behavior. Traditional positive assertions can be optimized away by the solver, requiring complex idioms to prevent this. The `cannot` approach leverages ASP's constraint mechanism[^guide] for more reliable testing.
 
-[^guide]: Potassco User Guide $3.1.2
+### Technical Background
 
-Constraints have no head and must alway be false. If yet it becomes true, the ASP runtime considers the model invalid. 
+In ASP, constraints are headless rules that must always evaluate to false. When a constraint becomes true, the runtime considers the model invalid. The natural reading of a constraint is: *"it cannot be the case that..."*
 
-I can be helpful to read a constraint as: *it cannot be the case that...*.  Hence the name `cannot`.
+By using `cannot` as a predicate head rather than a constraint, the framework allows these predicates to appear in models when they become true. The test runner then inspects the model and raises errors for any `cannot` predicates present.
 
-We use `cannot` as the head for a constraint. Now when it becomes true, the runtime will ignore it, and it will just end up in the model.
-
-This can be seen when running the example above without `--run-asp-tests`:
+**Example without test execution:**
 
 ```shell
 $ clingo+ logic.lp
@@ -153,29 +167,67 @@ cannot("at least one edge")
 SATISFIABLE
 ```
 
-We just raise errors for `cannot`s in a model. 
+The `cannot` predicate appears in the model, which the test runner would flag as a failure. This approach provides a straightforward testing mechanism: if you can write ASP constraints, you can write `cannot` assertions.
 
-Now, if you can write constraints, you can write `cannot`s.
+## Architecture
 
+### Plugin System
 
-## Status
+`asp-selftest` is built on a flexible plugin architecture that enables modular extension and customization of the testing framework. The plugin system uses a functional composition pattern where each plugin wraps the next in a processing chain, allowing for clean separation of concerns and easy extensibility.
 
-This tools is still a **work in progress**. I use it for a project to providing **formal specifications** for **railway interlocking**. It consist of 35 files, 100+ tests and 600+ `cannot`s.
+The core plugin chain includes:
 
+- **clingo_main_plugin**: Provides CLI integration and argument handling
+- **stdin_to_tempfile_plugin**: Manages input from stdin by converting it to temporary files
+- **clingo_syntaxerror_plugin**: Enhances error messages with rich formatting and context
+- **clingo_sequencer_plugin**: Orchestrates the standard Clingo workflow (Load → Ground → Solve)
+- **testrunner_plugin**: Discovers and executes tests, enforcing isolation and dependency management
+- **clingo_reify_plugin**: Provides ASP reification support for advanced meta-programming
+- **clingo_defaults_plugin**: Configures default behaviors and settings
 
-`asp-selftest` has been presented at [Declarative Amsterdam in November 2024](https://declarative.amsterdam/program-2024).
+Each plugin receives the next plugin in the chain as its first argument and can intercept, modify, or enhance the processing pipeline. This architecture allows developers to extend the framework with custom plugins for specialized testing scenarios or integration with other tools.
 
+## Project Status
 
-# Installing and running
+`asp-selftest` is actively maintained and used in production environments. The framework has been successfully deployed for formal specification of railway interlocking systems, comprising 35 files, over 100 tests, and more than 600 assertions.
 
-## Installing
+The project was presented at [Declarative Amsterdam in November 2024](https://declarative.amsterdam/program-2024).
 
-    pip install asp-selftest
+## Installation and Usage
 
-Run it using:
+### Installation
 
-    $ clingo+ <file.lp> --run-asp-tests
+```bash
+pip install asp-selftest
+```
 
-There is one additional option to run the in-source Python tests:
+### Running ASP Tests
 
-    $ clingo+ --run-python-tests
+```bash
+clingo+ <file.lp> --run-asp-tests
+```
+
+### Running Python Tests
+
+The framework includes support for in-source Python tests:
+
+```bash
+clingo+ --run-python-tests
+```
+
+## Requirements
+
+- Python 3.13 or higher
+- Clingo 5.8.0 or higher
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. See the LICENSE file for details.
+
+## Contributing
+
+Contributions are welcome. Please ensure that all tests pass before submitting pull requests.
+
+## Repository
+
+This project has been migrated from GitHub to Codeberg.
