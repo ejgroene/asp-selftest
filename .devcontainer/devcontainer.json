@@ -1,0 +1,88 @@
+// The Dev Container format allows you to configure your environment. At the heart of it
+// is a Docker image or Dockerfile which controls the tools available in your environment.
+//
+// See https://aka.ms/devcontainer.json for more information.
+{
+	"name": "Ona",
+	// Use "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+	// instead of the build to use a pre-built image.
+	"build": {
+        "context": ".",
+        "dockerfile": "Dockerfile"
+    },
+	// Install Python dependencies automatically after container is created
+	"postCreateCommand": "pip3 install -e . --break-system-packages",
+	// Features add additional features to your environment. See https://containers.dev/features
+	// Beware: features are not supported on all platforms and may have unintended side-effects.
+	// "features": {
+    //   "ghcr.io/devcontainers/features/docker-in-docker": {
+    //     "moby": false
+    //   }
+    // }
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"shd101wyy.markdown-preview-enhanced"
+			],
+			"settings": {
+				// Simplify UI for non-programmers editing markdown
+				"workbench.activityBar.visible": true,
+				"workbench.statusBar.visible": false,
+				"workbench.sideBar.location": "left",
+				"workbench.sideBar.visible": true,
+				// Hide unnecessary activity bar items, keep only Explorer and Source Control
+				"workbench.activityBar.iconClickBehavior": "toggle",
+				"search.exclude": {
+					"**/*": true
+				},
+				"editor.minimap.enabled": false,
+				"breadcrumbs.enabled": false,
+				"editor.glyphMargin": false,
+				"editor.folding": false,
+				"editor.renderLineHighlight": "none",
+				"editor.occurrencesHighlight": false,
+				"editor.selectionHighlight": false,
+				"editor.renderWhitespace": "none",
+				"editor.renderControlCharacters": false,
+				"workbench.editor.showTabs": true,
+				"workbench.editor.tabCloseButton": "off",
+				"terminal.integrated.tabs.enabled": false,
+				"workbench.tips.enabled": false,
+				"workbench.startupEditor": "none",
+				"explorer.confirmDelete": true,
+				"explorer.confirmDragAndDrop": true,
+				"files.exclude": {
+					"**/pyproject.toml": true,
+					"**/LICENSE": true,
+					"**/.vscode": true,
+					"**/.git": true,
+					"**/.gitignore": true,
+					"**/.gitattributes": true,
+					"**/.devcontainer": true,
+					"**/__pycache__": true,
+					"**/*.pyc": true,
+					"**/.pytest_cache": true,
+					"**/.coverage": true,
+					"**/*.egg-info": true,
+					"**/build": true,
+					"**/dist": true,
+					"**/.env": true,
+					"**/*.swp": true
+				},
+				"files.autoSave": "afterDelay",
+				"files.autoSaveDelay": 1000,
+				// Markdown-specific settings
+				"[markdown]": {
+					"editor.wordWrap": "on",
+					"editor.quickSuggestions": false,
+					"editor.snippetSuggestions": "none",
+					"editor.formatOnSave": false
+				},
+				// Automatically open markdown preview
+				"markdown-preview-enhanced.automaticallyShowPreviewOfMarkdownBeingEdited": true,
+				"markdown-preview-enhanced.enableScriptExecution": true,
+				"markdown-preview-enhanced.runAllCodeChunksOnLoad": true
+			}
+		}
+	}
+}
