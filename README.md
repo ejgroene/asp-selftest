@@ -102,6 +102,11 @@ edge(a,b) node(b) node(a)
 SATISFIABLE
 ```
 
+If Markdown Preview Enhanced is installed, you can run the command below:
+
+```bash {cmd}
+clingo+ examples/nodes.lp examples/edges.lp --run-asp-tests
+```
 
 
 ## Test Dependencies
