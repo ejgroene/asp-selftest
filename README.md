@@ -189,7 +189,7 @@ Each plugin receives the next plugin in the chain as its first argument and can 
 
 ## Project Status
 
-`asp-selftest` is actively maintained and used in production environments. The framework has been successfully deployed for formal specification of railway interlocking systems, comprising 35 files, over 100 tests, and more than 600 assertions.
+`asp-selftest` is actively maintained and used in a production environment. The framework has been successfully deployed for formal specification of railway interlocking systems, comprising 35 files, over 100 tests, and more than 600 assertions.
 
 The project was presented at [Declarative Amsterdam in November 2024](https://declarative.amsterdam/program-2024).
 
