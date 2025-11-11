@@ -16,8 +16,8 @@ pip install asp-selftest
 
 ### Basic Usage
 
-```bash
-clingo+ <file.lp> --run-asp-tests
+```bash {cmd}
+clingo+ examples/edges.lp --run-asp-tests
 ```
 
 ## Core Concepts
