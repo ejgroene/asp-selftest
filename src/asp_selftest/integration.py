@@ -22,13 +22,18 @@ from .plugins import (
     testrunner_plugin,
     stdin_to_tempfile_plugin,
     compound_context_plugin,
+    clingo_reify_plugin,
 )
 
 import selftest
 test = selftest.get_tester(__name__)
 
 
-def ground_exc(source=None, label=None, files=(), include_paths=(), arguments=(), observer=None, trace=None, **etc):
+def ground_exc(source=None, label=None, files=(),
+               include_paths=(), arguments=(),
+               observer=None, trace=None,
+               session=clingo_session,
+               **etc):
     """ a general pupose one-stop ground function """
     old_path = os.environ.get('CLINGOPATH', '').split(':')
     os.environ['CLINGOPATH'] = ':'.join((*old_path, *include_paths))
@@ -36,7 +41,7 @@ def ground_exc(source=None, label=None, files=(), include_paths=(), arguments=()
         control = clingo.Control(arguments=arguments)
         if observer:
             control.register_observer(observer)
-        clingo_session(
+        session(
             control=control,
             source=source,
             label=label,
