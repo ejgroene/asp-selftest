@@ -51,7 +51,8 @@ def prepare_test_files(files):
 
 def check_model(model, errornote):
     by_signature = model.context.symbolic_atoms.by_signature
-    if failures := [s for s in by_signature('cannot', 1) if model.is_true(s.literal)]: # TODO find test for is_true!
+    cannots = (s for n in [1, 2] for s in by_signature('cannot', n))
+    if failures := [s for s in cannots if model.is_true(s.literal)]: # TODO find test for is_true!
         e = AssertionError(', '.join(str(f.symbol) for f in failures))
         e.add_note(f"{errornote}. Model follows.")
         symbols = '\n'.join(
@@ -362,6 +363,13 @@ def run_tests_flag(stdout):
     with test.stdout as out:
         parse_and_run_tests(code, run_tests=False)
     test.eq('', out.getvalue())
+
+
+@test
+def cannot_with_more_args():
+    code = 'p(1;2).  cannot("message:", A)  :-  p(A).'
+    with test.raises(AssertionError, 'cannot("message:",1), cannot("message:",2)'):
+        parse_and_run_tests(code, run_tests=True)
 
 
 @test
