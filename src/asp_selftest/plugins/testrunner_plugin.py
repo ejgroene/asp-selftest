@@ -12,6 +12,10 @@ test =  selftest.get_tester(__name__)
 from .misc import NA, write_file, format_symbols
 
 
+class ConstraintError(Exception):
+    pass
+
+
 def is_testprogram(a):
     if a.ast_type == clingo.ast.ASTType.Program:
         if a.name.startswith('test_'):
@@ -27,7 +31,7 @@ def gather_tests(files, logger):
         if program := is_testprogram(ast):
             name, dependencies = program
             if name in tests:
-                raise AssertionError(f"Duplicate test: {name!r} in {filename}.")
+                raise ConstraintError(f"Duplicate test: {name!r} in {filename}.")
             tests[name] = (dependencies, ast.location.begin.line)
 
     def _logger(code, message):
@@ -53,7 +57,7 @@ def check_model(model, errornote):
     by_signature = model.context.symbolic_atoms.by_signature
     cannots = (s for n in [1, 2] for s in by_signature('cannot', n))
     if failures := [s for s in cannots if model.is_true(s.literal)]: # TODO find test for is_true!
-        e = AssertionError(', '.join(str(f.symbol) for f in failures))
+        e = ConstraintError(', '.join(str(f.symbol) for f in failures))
         e.add_note(f"{errornote}. Model follows.")
         symbols = '\n'.join(
                 str(s) for s in model.symbols(shown=True)
@@ -132,7 +136,7 @@ def testrunner_plugin_basics(tmp_path, stdout):
     _0, load, ground, solve = testrunner_plugin(tracing_clingo_plugin())
 
     main_control = clingo.Control()
-    with test.raises(AssertionError, 'cannot("I fail")') as e:
+    with test.raises(ConstraintError, 'cannot("I fail")') as e:
         load(main_control, files=(testfile,))
     test.eq(e.exception.__notes__[0], f"File {testfile}, line 1, in test_a(). Model follows.")
     test.eq(stdout.getvalue(), f"Testing {testfile}\n  test_a()\n")
@@ -195,7 +199,7 @@ def parse_and_run_tests(asp_code, trace=lambda _:None, **etc):
 
 @test
 def cannot_in_base(stdout):
-    with test.raises(AssertionError, 'cannot(fail)'):
+    with test.raises(ConstraintError, 'cannot(fail)'):
         parse_and_run_tests("cannot(fail).")  # constraints in base
     test.endswith(stdout.getvalue(), "/inputfile.lp\nTesting base\n  base\n")
 
@@ -209,7 +213,7 @@ def cannot_in_base_in_multiple_files(tmp_path):
     ctl = clingo.Control()
     try:
         load(ctl, files=(a,))
-    except AssertionError as e:
+    except ConstraintError as e:
         test.eq('cannot("need b")', str(e))
     else:
         self.fail()
@@ -229,7 +233,7 @@ def use_arguments_for_testing(stdout):
         arguments=['--const', 'a=42'],
         trace=trace.append)
     test.eq({'logger': None, 'arguments': ['--const', 'a=42'], 'context': None}, trace[0])
-    with test.raises(AssertionError, "cannot(99)"):
+    with test.raises(ConstraintError, "cannot(99)"):
         parse_and_run_tests(
             asp_program,
             arguments=['--const', 'a=99'])
@@ -254,7 +258,7 @@ def use_context_when_running_tests(stdout):
     n = 42
     test.endswith(stdout.getvalue(), "/inputfile.lp\n  test_a_42()\nTesting base\n  base\n")
     p = stdout.tell()
-    with test.raises(AssertionError, "cannot(42)"):
+    with test.raises(ConstraintError, "cannot(42)"):
         parse_and_run_tests(
             asp_program,
             context=MyContext())
@@ -272,7 +276,7 @@ def check_for_duplicate_test():
 
 @test
 def format_empty_model(stderr, stdout):
-    with test.raises(AssertionError) as e:
+    with test.raises(ConstraintError) as e:
         parse_and_run_tests("""
             #program test_model_formatting.
             #external what.
@@ -292,7 +296,7 @@ def format_empty_model(stderr, stdout):
 
 @test
 def format_model_small(stderr, stdout):
-    with test.raises(AssertionError) as e:
+    with test.raises(ConstraintError) as e:
         parse_and_run_tests("""
             #program test_model_formatting.
             this_is_a_fact(1..2).
@@ -307,7 +311,7 @@ def format_model_small(stderr, stdout):
 
 @test
 def format_model_wide(stderr, stdout):
-    with test.raises(AssertionError) as e:
+    with test.raises(ConstraintError) as e:
         parse_and_run_tests("""
             #program test_model_formatting.
             this_is_a_fact(1..3).
@@ -358,7 +362,7 @@ def dependencies(stderr, stdout):
 @test
 def run_tests_flag(stdout):
     code = "#program test_a. cannot(true)."
-    with test.raises(AssertionError, "cannot(true)"):
+    with test.raises(ConstraintError, "cannot(true)"):
         parse_and_run_tests(code, run_tests=True)
     with test.stdout as out:
         parse_and_run_tests(code, run_tests=False)
@@ -368,7 +372,7 @@ def run_tests_flag(stdout):
 @test
 def cannot_with_more_args():
     code = 'p(1;2).  cannot("message:", A)  :-  p(A).'
-    with test.raises(AssertionError, 'cannot("message:",1), cannot("message:",2)'):
+    with test.raises(ConstraintError, 'cannot("message:",1), cannot("message:",2)'):
         parse_and_run_tests(code, run_tests=True)
 
 
