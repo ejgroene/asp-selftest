@@ -52,6 +52,15 @@ cannot("node z")  :-  not node(z).  % This assertion will fail
 
 The framework uses `cannot` predicates as inverted assertions. This design leverages ASP's constraint mechanism to avoid optimization issues that would affect traditional positive assertions.
 
+As of version v0.1.6 `cannot` supports two arguments.  This is usefull for tracking which values make a cannot fail. Suppose we want to ensure that for every `node` `N` a color is defined with `node_color`:
+
+```prolog
+cannot("undefined node color", N)  :-  node(N), not node_color(N, _).
+```
+
+Now we can see in the error message for which node `N` there is no color.
+
+
 **Execution Example:**
 
 ```shell
