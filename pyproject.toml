@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asp_selftest"
+license = "GPL-3.0-or-later"
 
 # dynamic as per setuptools_scm
 dynamic = ["version"]
@@ -15,7 +16,6 @@ requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: ASP",
-    "License :: OSI Approved :: GNU General Public License (GPL)",
     "Operating System :: OS Independent",
 ]
 dependencies=[
