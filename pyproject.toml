@@ -26,7 +26,7 @@ dependencies=[
 
 
 [project.scripts]
-"clingo+"    = "asp_selftest.__main__:clingo_plus"
+"clingoy"    = "asp_selftest.__main__:clingo_plus"
 
 
 [project.urls]
