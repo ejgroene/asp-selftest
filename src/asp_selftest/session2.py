@@ -92,12 +92,15 @@ def clingo_main_session(**kwargs):
             *common_plugins),
         **kwargs)
 
+clingo_session_plugins = (
+    source_plugin,
+    clingo_control_plugin,
+    *common_plugins
+)
+
 def clingo_session(**kwargs):
     return session2(
-        plugins=(
-            source_plugin,
-            clingo_control_plugin,
-            *common_plugins),
+        plugins=clingo_session_plugins,
         **kwargs)
 
 
