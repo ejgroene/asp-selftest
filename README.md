@@ -2,6 +2,8 @@
 
 A unit testing framework for **Answer Set Programming** (ASP) that enables in-source test definitions and execution.
 
+NB: `clingo+` is now `clingoy`, as the `+` is no longer allowd by Python packaging.
+
 ## Overview
 
 `asp-selftest` extends the Clingo ASP solver with integrated testing capabilities, allowing developers to write and execute unit tests directly within their logic programs. Tests are defined using standard ASP syntax and executed in isolated contexts to ensure reliability and maintainability.
@@ -17,7 +19,7 @@ pip install asp-selftest
 ### Basic Usage
 
 ```bash {cmd}
-clingo+ examples/edges.lp --run-asp-tests
+clingoy examples/edges.lp --run-asp-tests
 ```
 
 ## Core Concepts
@@ -64,7 +66,7 @@ Now we can see in the error message for which node `N` there is no color.
 **Execution Example:**
 
 ```shell
-$ clingo+ nodes.lp --run-asp-tests
+$ clingoy nodes.lp --run-asp-tests
 ...
 Reading from nodes.lp
 Testing nodes.lp
@@ -88,7 +90,7 @@ cannot("node z")  :-  node(z).
 After unit tests pass, the framework validates the base program. If prerequisites are missing, appropriate errors are reported:
 
 ```shell
-$ clingo+ nodes.lp --run-asp-tests
+$ clingoy nodes.lp --run-asp-tests
 ...
 AssertionError: cannot("at least one edge")
 File nodes.lp, line ?, in base. Model follows.
@@ -98,7 +100,7 @@ File nodes.lp, line ?, in base. Model follows.
 Adding the required data file resolves the issue:
 
 ```shell
-$ clingo+ nodes.lp edges.lp --run-asp-tests
+$ clingoy nodes.lp edges.lp --run-asp-tests
 ...
 Testing nodes.lp
   test_edge_leads_to_nodes(base)
@@ -143,7 +145,7 @@ This scoping ensures that tests remain independent and do not interfere with eac
 The framework provides clear, actionable error messages for syntax and semantic errors:
 
 ```shell
-$ clingo+ logic.lp
+$ clingoy logic.lp
 ...
 Traceback (most recent call last):
   ...
@@ -167,8 +169,8 @@ By using `cannot` as a predicate head rather than a constraint, the framework al
 **Example without test execution:**
 
 ```shell
-$ clingo+ logic.lp
-clingo+ version 5.8.0
+$ clingoy logic.lp
+clingoy version 5.8.0
 Reading from logic.lp
 Solving...
 Answer: 1 (Time: 0.001s)
@@ -213,7 +215,7 @@ pip install asp-selftest
 ### Running ASP Tests
 
 ```bash
-clingo+ <file.lp> --run-asp-tests
+clingoy <file.lp> --run-asp-tests
 ```
 
 ### Running Python Tests
@@ -221,7 +223,7 @@ clingo+ <file.lp> --run-asp-tests
 The framework includes support for in-source Python tests:
 
 ```bash
-clingo+ --run-python-tests
+clingoy --run-python-tests
 ```
 
 ## Requirements
