@@ -57,43 +57,45 @@ def ground_exc(source=None, label=None, files=(),
 
 
 @test
-def ground_simple(stdout):
+def ground_simple(stderr):
     control = ground_exc(source="a. b.")
     test.isinstance(control, clingo.Control)
     test.eq(['a', 'b'], list_symbols(control))
-    test.endswith(stdout.getvalue(), "-string.lp\nTesting base\n  base\n")
+    test.endswith(stderr.getvalue(), "-string.lp\nTesting base\n  base\n")
 
 
 @test
-def ground_files(tmp_path, stdout):
+def ground_files(tmp_path, stderr):
     f1 = write_file(tmp_path/'f1', "f(1).")
     f2 = write_file(tmp_path/'f2', "f(2).")
     control = ground_exc(files=(f1, f2))
     test.eq(['f(1)', 'f(2)'], list_symbols(control))
-    out = stdout.getvalue()
+    out = stderr.getvalue()
     test.contains(out, "/f1\nTesting ")
     test.contains(out, "/f2\nTesting base\n  base\n")
 
 
 @test
-def ground_with_observer(stdout):
+def ground_with_observer(stderr):
     atoms = {}
     class MyObserver:
         def output_atom(self, symbol, atom):
             atoms[atom] = symbol
     ground_exc(source="a.", observer=MyObserver())
     test.eq({0: clingo.Function('a', [], True)}, atoms)
-    test.endswith(stdout.getvalue(), "-string.lp\nTesting base\n  base\n")
+    test.endswith(stderr.getvalue(), "-string.lp\nTesting base\n  base\n")
 
 
 @test
-def pass_arguments_to_control(stdout):
-    with test.raises(SyntaxError, "atom does not occur in any rule head:  b"), test.stderr as stderr:
+def pass_arguments_to_control(stderr, stdout):
+    with test.raises(SyntaxError, "atom does not occur in any rule head:  b"):
         ground_exc(source="a :- b.")
+    test.eq("", stdout.getvalue())
     test.endswith(stderr.getvalue(), "-string.lp:1:6-7: info: atom does not occur in any rule head:\n  b\n\n")
+
     c = ground_exc(source="c. a :- b.", arguments=['--warn', 'no-atom-undefined'])
     test.eq(['c'], list_symbols(c))
-    test.eq(2, stdout.getvalue().count("-string.lp\nTesting base\n  base\n"))
+    test.eq(2, stderr.getvalue().count("-string.lp\nTesting base\n  base\n"))
 
 
 @test
@@ -104,21 +106,21 @@ def raise_syntaxerror():
 
 
 @test
-def has_reify(stdout):
+def has_reify(stderr):
     c = ground_exc(source="b. rule(a, b).")
     test.eq(['b', 'a', 'rule(a,b)'], list_symbols(c))
-    test.endswith(stdout.getvalue(), "-string.lp\nTesting base\n  base\n")
+    test.endswith(stderr.getvalue(), "-string.lp\nTesting base\n  base\n")
 
 
 @test
-def include_path(tmp_path, stdout):
+def include_path(tmp_path, stderr):
     before = os.environ.get('CLINGOPATH', 'nope')
     (tmp_path/'inc.lp').write_text("included.")
     c = ground_exc(source='#include "inc.lp".', include_paths=[tmp_path.as_posix()])
     test.eq(['included'], list_symbols(c))
     after = os.environ.get('CLINGOPATH', 'nope')
     test.eq(before, after)
-    out = stdout.getvalue()
+    out = stderr.getvalue()
     test.contains(out, "/inc.lp\nTesting ")
     test.endswith(out, "-string.lp\nTesting base\n  base\n")
 
@@ -227,5 +229,3 @@ def maybe_session_is_the_problem():
         m = str(m)
         test.eq('a b c', m)
     test.eq(1, models)
-
-

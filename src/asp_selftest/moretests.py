@@ -45,15 +45,12 @@ def maybe_shutup_selftest(argv):
 
 @test
 def main_entry_point_basics():
+    """Clingo intermixes models with progress messages on stdout, unfortunately."""
     p = spawn_clingo_plus(input=b"skaludicat. #program test_gotashparot(base).", arguments=['--run-asp-tests'])
-    test.eq(b'', p.stderr)
+    test.eq(b'Testing stdin\n  test_gotashparot(base)\nTesting base\n  base\n', p.stderr)
     test.startswith(p.stdout.decode(), f"""\
 clingo+ version {VERSION}
 Reading from stdin
-Testing stdin
-  test_gotashparot(base)
-Testing base
-  base
 Solving...""")
     test.contains(p.stdout.decode(), f"""\
 skaludicat
@@ -73,7 +70,7 @@ def simple_syntax_error_with_clingo_main():
 asp_selftest.plugins.messageparser.AspSyntaxError: syntax error, unexpected EOF
 """
     test.endswith(traceback, should, diff=test.diff)
-    test.comp.contains(p.stdout, b"*** ERROR")
+    test.comp.contains(p.stderr, b"*** ERROR")
     test.comp.contains(traceback, b"*** ERROR")
 
 
@@ -130,8 +127,8 @@ def tester_runs_tests(tmp_path, argv, stdout, stderr):
     """)
     argv += [f.as_posix(), '--run-asp-tests', '--run-python-tests']
     clingo_plus()
-    test.contains(stdout.getvalue(), f"Testing {f}\n  test_fact(base)\nTesting base\n  base\n")
-    test.startswith(stderr.getvalue(), "")
+    test.contains(stderr.getvalue(), f"Testing {f}\n  test_fact(base)\nTesting base\n  base\n")
+    test.startswith(stdout.getvalue(), "clingo+ version ")
 
 
 @test
@@ -148,7 +145,7 @@ def clingo_dropin_default_hook_tests(tmp_path, argv, stdout, stderr):
     """)
     argv += [f.as_posix(), '--run-asp-tests', '--run-python-tests']
     clingo_plus()
-    s = stdout.getvalue()
+    s = stderr.getvalue()
     test.contains(s, f"Testing {f}\n  test_fact_1(base)\n  test_fact_2(base)\nTesting base\n  base\n")
     test.startswith(stderr.getvalue(), "")
 
@@ -182,9 +179,8 @@ models(1).
     """)
     argv += [f.as_posix(), '--run-asp-tests', '--run-python-tests']
     clingo_plus()
-    s = stdout.getvalue()
+    s = stderr.getvalue()
     test.contains(s, f"Testing {f}\n  test_one()\n")
-    test.startswith(stderr.getvalue(), "")
 
 
 @test
@@ -202,4 +198,4 @@ def bug_read_stdin_and_solve_with_run_tests():
     p = spawn_clingo_plus(input=b"a. b. c.", arguments=['--run-asp-tests'])
     test.contains(p.stdout, b"Answer: 1 (Time: ")
     test.contains(p.stdout, b"s)\na b c\nSATISFIABLE\n")
-    test.eq(b'', p.stderr)
+    test.eq(b'Testing stdin\nTesting base\n  base\n', p.stderr)
