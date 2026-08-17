@@ -71,6 +71,10 @@ def check_model(model, errornote):
         raise e
 
 
+def log_progress(*args, **kwargs):
+    print(*args, **kwargs, file=sys.stderr)
+
+
 def testrunner_plugin(
     next, run_tests=True, logger=None, arguments=(), context=None, **etc
 ):
@@ -90,7 +94,7 @@ def testrunner_plugin(
                 logger=logger, arguments=new_args, context=context, **etc
             )
             sub_control = clingo.Control(arguments=new_args, logger=logger)
-            print(" ", fulltestname, end="", flush=True)
+            log_progress(" ", fulltestname, end="", flush=True)
             try:
                 sub_load(sub_control, files=filenames)
                 sub_ground(sub_control, parts=parts, context=context)
@@ -99,10 +103,10 @@ def testrunner_plugin(
                         errornote = f"File {','.join(filenames)}, line {lineno}, in {fulltestname}"
                         check_model(model, errornote)
             finally:
-                print(flush=True)
+                log_progress(flush=True)
 
         for filename, tests in gather_tests(files, logger):
-            print("Testing", "stdin" if filename.endswith("-stdin.lp") else filename)
+            log_progress("Testing", "stdin" if filename.endswith("-stdin.lp") else filename)
             for testname, (dependencies, lineno) in tests.items():
                 parts = [
                     (testname, [NA for _ in dependencies]),
@@ -111,7 +115,7 @@ def testrunner_plugin(
                 fulltestname = f"{testname}({', '.join(dependencies)})"
                 verify_cannots((filename,), fulltestname, parts, lineno)
 
-        print("Testing base")
+        log_progress("Testing base")
         verify_cannots(
             files, "base", (("base", ()),), "?"
         )  # TODO locate failing cannot: file/lineno??
@@ -144,7 +148,7 @@ def tracing_clingo_plugin(trace=lambda x: None):
 
 
 @test
-def testrunner_plugin_basics(tmp_path, stdout):
+def testrunner_plugin_basics(tmp_path, stderr):
     testfile = write_file(
         tmp_path / "testfile.lp",
         """\
@@ -162,11 +166,11 @@ def testrunner_plugin_basics(tmp_path, stdout):
         e.exception.__notes__[0],
         f"File {testfile}, line 1, in test_a(). Model follows.",
     )
-    test.eq(stdout.getvalue(), f"Testing {testfile}\n  test_a()\n")
+    test.eq(stderr.getvalue(), f"Testing {testfile}\n  test_a()\n")
 
 
 @test
-def testrunner_plugin_no_failures(tmp_path, stdout):
+def testrunner_plugin_no_failures(tmp_path, stderr):
     testfile = write_file(
         tmp_path / "testfile.lp",
         """\
@@ -181,7 +185,7 @@ def testrunner_plugin_no_failures(tmp_path, stdout):
     main_control = clingo.Control()
     load(main_control, files=(testfile,))
     test.eq(
-        stdout.getvalue(), f"Testing {testfile}\n  test_a(base)\nTesting base\n  base\n"
+        stderr.getvalue(), f"Testing {testfile}\n  test_a(base)\nTesting base\n  base\n"
     )
 
     ground(main_control, parts=(("base", ()), ("test_a", ())))
@@ -204,8 +208,8 @@ def run_tests_per_included_file_separately(tmp_path, stdout, stderr):
     )
     main_control = clingo.Control(arguments=["--warn", "no-file-included"])
     load(main_control, files=(part_c,))
-    test.eq("", stderr.getvalue())
-    out = stdout.getvalue()
+    test.eq("", stdout.getvalue())
+    out = stderr.getvalue()
     test.contains(
         out,
         f"""\
@@ -232,10 +236,10 @@ def parse_and_run_tests(asp_code, trace=lambda _: None, **etc):
 
 
 @test
-def cannot_in_base(stdout):
+def cannot_in_base(stderr):
     with test.raises(ConstraintError, "cannot(fail)"):
         parse_and_run_tests("cannot(fail).")  # constraints in base
-    test.endswith(stdout.getvalue(), "/inputfile.lp\nTesting base\n  base\n")
+    test.endswith(stderr.getvalue(), "/inputfile.lp\nTesting base\n  base\n")
 
 
 @test
@@ -259,7 +263,7 @@ def cannot_in_base_in_multiple_files(stdout, tmp_path):
 
 
 @test
-def use_arguments_for_testing(stdout):
+def use_arguments_for_testing(stderr):
     trace = []
     asp_program = "sum(a). cannot(a) :- not sum(42)."
     parse_and_run_tests(asp_program, arguments=["--const", "a=42"], trace=trace.append)
@@ -268,11 +272,11 @@ def use_arguments_for_testing(stdout):
     )
     with test.raises(ConstraintError, "cannot(99)"):
         parse_and_run_tests(asp_program, arguments=["--const", "a=99"])
-    test.endswith(stdout.getvalue(), "/inputfile.lp\nTesting base\n  base\n")
+    test.endswith(stderr.getvalue(), "/inputfile.lp\nTesting base\n  base\n")
 
 
 @test
-def use_context_when_running_tests(stdout):
+def use_context_when_running_tests(stderr):
     trace = []
     asp_program = "#program test_a_42. a(42). cannot(@a()) :- a(@a())."
     n = 43
@@ -286,14 +290,14 @@ def use_context_when_running_tests(stdout):
     test.eq(mycontext, trace[0]["context"])
     n = 42
     test.endswith(
-        stdout.getvalue(), "/inputfile.lp\n  test_a_42()\nTesting base\n  base\n"
+        stderr.getvalue(), "/inputfile.lp\n  test_a_42()\nTesting base\n  base\n"
     )
-    p = stdout.tell()
+    p = stderr.tell()
     with test.raises(ConstraintError, "cannot(42)"):
         parse_and_run_tests(asp_program, context=MyContext())
-    stdout.seek(p)
-    out = stdout.read()
-    test.endswith(out, "/inputfile.lp\n  test_a_42()\n")
+    stderr.seek(p)
+    err = stderr.read()
+    test.endswith(err, "/inputfile.lp\n  test_a_42()\n")
 
 
 @test
@@ -391,9 +395,9 @@ def dependencies(stderr, stdout):
         cannot(one_fact) :- not one_fact.
     """
     )
-    test.eq("", stderr.getvalue())
+    test.eq("", stdout.getvalue())
     test.endswith(
-        stdout.getvalue(),
+        stderr.getvalue(),
         "/inputfile.lp\n  test_base(base)\n  test_one(base, one)\nTesting base\n  base\n",
     )
 
