@@ -26,7 +26,7 @@ class CompoundContext:
 
 def compound_context_plugin(next, **etc):
 
-    logger, load, _ground, solve = next(**etc)
+    load, _ground, solve = next(**etc)
 
     def ground(control, parts=(("base", ()),), context=None):
         compound_context = CompoundContext()
@@ -34,7 +34,7 @@ def compound_context_plugin(next, **etc):
             compound_context.add_context(context)
         _ground(control, parts=parts, context=compound_context)
 
-    return logger, load, ground, solve
+    return load, ground, solve
 
 
 # tests in integration.py
