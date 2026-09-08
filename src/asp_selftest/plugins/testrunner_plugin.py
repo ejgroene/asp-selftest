@@ -87,6 +87,7 @@ def testrunner_plugin(
     new_args = list(itertools.dropwhile(lambda p: not p.startswith("--"), arguments))
 
     quit = False
+
     def error_detector_logger(*args):
         """Registers if an error has been logged by Clingo. We cannot raise
         exceptions here, since this is a Clingo callback. We do want to quit however."""
@@ -101,7 +102,9 @@ def testrunner_plugin(
             sub_logger, sub_load, sub_ground, sub_solve = next(
                 logger=error_detector_logger, arguments=new_args, context=context, **etc
             )
-            sub_control = clingo.Control(arguments=new_args, logger=error_detector_logger)
+            sub_control = clingo.Control(
+                arguments=new_args, logger=error_detector_logger
+            )
             log_progress(" ", fulltestname, end="", flush=True)
             try:
                 sub_load(sub_control, files=filenames)
@@ -118,7 +121,9 @@ def testrunner_plugin(
                 log_progress(flush=True)
 
         for filename, tests in gather_tests(files, error_detector_logger):
-            log_progress("Testing", "stdin" if filename.endswith("-stdin.lp") else filename)
+            log_progress(
+                "Testing", "stdin" if filename.endswith("-stdin.lp") else filename
+            )
             for testname, (dependencies, lineno) in tests.items():
                 parts = [
                     (testname, [NA for _ in dependencies]),
@@ -129,7 +134,6 @@ def testrunner_plugin(
 
         if quit:
             return
-
 
         log_progress("Testing base")
         verify_cannots(
