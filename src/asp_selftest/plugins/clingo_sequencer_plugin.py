@@ -22,7 +22,8 @@ def clingo_sequencer_plugin(
     def main():
         load(control, files=files)
         ground(control, parts=parts, context=context)
-        return solve(control, on_model=on_model, yield_=yield_), control
+        result = solve(control, on_model=on_model, yield_=yield_)
+        return result, control
 
     return main
 

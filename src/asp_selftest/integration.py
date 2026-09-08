@@ -2,7 +2,7 @@
 
 import sys
 import os
-
+import traceback
 import clingo
 
 from .plugins.misc import write_file, list_symbols
@@ -92,16 +92,24 @@ def ground_with_observer(stderr):
 
 @test
 def pass_arguments_to_control(stderr, stdout):
-    with test.raises(SyntaxError, "atom does not occur in any rule head:  b"):
+    with test.raises(SyntaxError, "atom does not occur in any rule head:  b") as e:
         ground_exc(source="a :- b.")
     test.eq("", stdout.getvalue())
-    test.endswith(
-        stderr.getvalue(),
-        "-string.lp:1:6-7: info: atom does not occur in any rule head:\n  b\n\n",
+    tb = "".join(traceback.format_exception(e.exception)[-3:])
+    test.fnmatch(
+        tb,
+        """\
+  File "*-string.lp", line 1
+    1 a :- b.
+           ^ atom does not occur in any rule head:  b
+asp_selftest.plugins.messageparser.AspSyntaxError: atom does not occur in any rule head:  b
+""",
     )
 
-    c = ground_exc(source="c. a :- b.", arguments=["--warn", "no-atom-undefined"])
-    test.eq(["c"], list_symbols(c))
+    result, control = ground_exc(
+        source="c. a :- b.", arguments=["--warn", "no-atom-undefined"]
+    )
+    test.eq(["c"], list_symbols(control))
     test.eq(2, stderr.getvalue().count("-string.lp\nTesting base\n  base\n"))
 
 
@@ -114,7 +122,7 @@ def raise_syntaxerror():
 
 @test
 def has_reify(stderr):
-    c = ground_exc(source="b. rule(a, b).")
+    _, c = ground_exc(source="b. rule(a, b).")
     test.eq(["b", "a", "rule(a,b)"], list_symbols(c))
     test.endswith(stderr.getvalue(), "-string.lp\nTesting base\n  base\n")
 
@@ -123,7 +131,7 @@ def has_reify(stderr):
 def include_path(tmp_path, stderr):
     before = os.environ.get("CLINGOPATH", "nope")
     (tmp_path / "inc.lp").write_text("included.")
-    c = ground_exc(source='#include "inc.lp".', include_paths=[tmp_path.as_posix()])
+    _, c = ground_exc(source='#include "inc.lp".', include_paths=[tmp_path.as_posix()])
     test.eq(["included"], list_symbols(c))
     after = os.environ.get("CLINGOPATH", "nope")
     test.eq(before, after)
@@ -138,13 +146,13 @@ class ContextA:
 
 
 def context_a_plugin(next, **etc):
-    logger, load, _ground, solve = next(**etc)
+    load, _ground, solve = next(**etc)
 
     def ground(control, parts, context):
         context.add_context(ContextA())
         _ground(control, parts=parts, context=context)
 
-    return logger, load, ground, solve
+    return load, ground, solve
 
 
 @test
@@ -162,7 +170,7 @@ def c():
 #end.
 a(@a()). b(@b()). c(@c()).
 """
-    result = session2(
+    result, control = session2(
         plugins=(
             source_plugin,
             clingo_control_plugin,
@@ -269,7 +277,7 @@ def do_not_mask_unknown_python_functions_when_failure():
         )
     # this tests if the exception is not raised twice (when in base, it got
     # raised for every #program test_XYZ(base) ).
-    test.eq([], e.exception.__notes__)
+    test.comp.truth(hasattr(e.exception, "__notes__"))
 
 
 @test
@@ -284,4 +292,4 @@ def do_not_mask_syntax_error_functions_when_failure():
         )
     # this tests if the exception is not raised twice (when in base, it got
     # raised for every #program test_XYZ(base) ).
-    test.eq([], e.exception.__notes__)
+    test.comp.truth(hasattr(e.exception, "__notes__"))
