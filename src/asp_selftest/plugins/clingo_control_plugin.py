@@ -42,10 +42,10 @@ class ControlEx:
             self.control.register_observer(observer)  # TODO test in new
         self.parse_files = self._getattr(self, "_parse_files")
 
-    def new(self):
+    def new(self, arguments=None):
         """creates a new instance with the same arguments as this one was created"""
         return __class__(
-            arguments=self.arguments,
+            arguments=arguments or self.arguments,
             logger=self.logger,
             message_limit=self.message_limit,
         )
@@ -66,7 +66,11 @@ class ControlEx:
                     self.error = None
                     ret = attr(*args, **kwargs)
                 except RuntimeError as e:
-                    assert str(e) in ["parsing failed", "syntax error"], e
+                    assert str(e) in [
+                        "parsing failed",
+                        "syntax error",
+                        "grounding stopped because of errors",
+                    ], e
                 if self.error:
                     raise warn2raise(None, None, *self.error)
                 else:
