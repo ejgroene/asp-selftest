@@ -4,6 +4,7 @@ import pathlib
 
 from .asputil import is_tuple, is_function, mk_symbol, mk_theory_atom
 from ..misc import write_file, create_control, list_symbols
+from ..clingo_control_plugin import ControlEx
 
 import selftest
 
@@ -40,14 +41,11 @@ def clingo_reify_plugin(
     on_rule=lambda _: None,
     parts=(("base", ()),),
     context=None,
-    arguments=(),
     **etc,
 ):
     """Plugin turning rule predicates into reallified rules and adds them to the control."""
 
-    _load, ground, solve = next(
-        parts=parts, context=context, arguments=arguments, **etc
-    )  # test **etc
+    _load, ground, solve = next(parts=parts, context=context, **etc)  # test **etc
 
     def load(control, files):
         reground = True
@@ -55,9 +53,12 @@ def clingo_reify_plugin(
 
         while reground:
             reground = False
-            sub_control = create_control(
-                arguments=[*arguments, "--warn", "no-atom-undefined"], **etc
+            sub_control = control.new(
+                arguments=control.arguments + ["--warn", "no-atom-undefined"]
             )
+            # sub_control = create_control(
+            #    arguments=[*arguments, "--warn", "no-atom-undefined"], **etc
+            # )
             _load(sub_control, files)
 
             for rule in rules_added:
@@ -365,7 +366,7 @@ def test_reify_plugin(tmp_path, code, rules, trace=lambda _: None, arguments=(),
     load, ground, _ = clingo_reify_plugin(
         next_plugin, on_rule=new_rules.add, arguments=arguments, **etc
     )
-    control = clingo.Control(arguments=arguments)
+    control = ControlEx(arguments=arguments)
     load(control, (f,))
     test.eq(rules, new_rules)
     ground(control, **etc)
@@ -498,19 +499,10 @@ def reify_with_context_in_plugin(tmp_path):
 
 @test
 def use_proper_logger(tmp_path):
-    trace = {}
-
-    def my_logger(code, message):
-        trace[code] = message
-
     try:
-        test_reify_plugin(tmp_path, "a", {}, logger=my_logger)
-    except RuntimeError as e:
-        test.eq("parsing failed", str(e))
-    finally:
-        code, message = next(iter(trace.items()))
-        test.eq(clingo.MessageCode.RuntimeError, code)
-        test.endswith(message, " error: syntax error, unexpected EOF\n")
+        test_reify_plugin(tmp_path, "a", {})
+    except SyntaxError as e:
+        test.eq(str(e), "syntax error, unexpected EOF (f.lp, line 2)")
 
 
 @test

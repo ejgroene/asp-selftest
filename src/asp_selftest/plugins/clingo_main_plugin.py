@@ -24,10 +24,20 @@ def clingo_main_plugin(next, arguments=(), **etc):
 
         def main(self, control, files):
             """As required by clingo_main. It must not raise."""
+            # we remove all files from the arguments, as Clingo also has done
+            options = [a for a in arguments if a not in files]
+            # we also remove an optional number of models
+            if options:
+                try:
+                    int(options[0])
+                except ValueError:
+                    pass
+                else:
+                    del options[0]
             try:
                 self.controlex = ControlEx(
                     control=control,
-                    arguments=arguments,
+                    arguments=options,
                     message_limit=self.message_limit,
                 )
                 _main = next(control=self.controlex, files=files, **etc)  # [3]
@@ -140,12 +150,28 @@ def pass_arguments_to_files(tmp_path, stdout):
         trace.append(etc)
         return next_main
 
-    main = clingo_main_plugin(next, arguments=[f1, f2])
+    main = clingo_main_plugin(next, arguments=["0", f1, f2])  # 0 = all models
     main()
     test.eq([f1, f2], trace[0])
-    test.isinstance(trace[1]["control"], ControlEx)
+    control = trace[1]["control"]
+    test.isinstance(control, ControlEx)
     test.eq("main", trace[2])
     test.eq(3, len(trace))
+    test.eq(
+        [
+            "--warn",
+            "atom-undefined",
+            "--warn",
+            "operation-undefined",
+            "--warn",
+            "global-variable",
+            "--warn",
+            "other",
+            "--warn",
+            "no-file-included",
+        ],
+        control.arguments,
+    )
 
 
 @test
