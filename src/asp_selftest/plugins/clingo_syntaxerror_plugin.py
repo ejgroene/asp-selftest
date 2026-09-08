@@ -28,7 +28,7 @@ def clingo_syntaxerror_plugin(next, msg2exc=msg2exc, **etc):
     def main():
         try:
             result = _main() # expect Clingo to call logger on error
-        except RuntimeError as e:
+        except Exception as e:
             if not exceptions:
                 raise e
         if exceptions:
