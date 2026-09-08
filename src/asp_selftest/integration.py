@@ -229,3 +229,30 @@ def maybe_session_is_the_problem():
         m = str(m)
         test.eq('a b c', m)
     test.eq(1, models)
+
+
+@test
+def do_not_mask_unknown_python_functions_when_failure():
+    with test.raises(SyntaxError, "operation undefined:  function 'f' not found") as e:
+        ground_exc("""
+            a(@f()).
+            #program test_x(base).
+                cannot("fail").
+            """)
+    # this tests if the exception is not raised twice (when in base, it got
+    # raised for every #program test_XYZ(base) ).
+    test.eq([], e.exception.__notes__)
+
+
+@test
+def do_not_mask_syntax_error_functions_when_failure():
+    with test.raises(SyntaxError, "unsafe variables in:  a(X):-[#inc_base].") as e:
+        ground_exc("""
+            a(X).
+            #program test_x(base).
+                cannot("fail").
+            """)
+    # this tests if the exception is not raised twice (when in base, it got
+    # raised for every #program test_XYZ(base) ).
+    test.eq([], e.exception.__notes__)
+

@@ -86,17 +86,29 @@ def testrunner_plugin(
 
     new_args = list(itertools.dropwhile(lambda p: not p.startswith("--"), arguments))
 
+    quit = False
+    def error_detector_logger(*args):
+        """Registers if an error has been logged by Clingo. We cannot raise
+        exceptions here, since this is a Clingo callback. We do want to quit however."""
+        nonlocal quit
+        quit = True
+        logger(*args)
+
     def load(control, files):
         files = prepare_test_files(files)
 
         def verify_cannots(filenames, fulltestname, parts, lineno):
             sub_logger, sub_load, sub_ground, sub_solve = next(
-                logger=logger, arguments=new_args, context=context, **etc
+                logger=error_detector_logger, arguments=new_args, context=context, **etc
             )
-            sub_control = clingo.Control(arguments=new_args, logger=logger)
+            sub_control = clingo.Control(arguments=new_args, logger=error_detector_logger)
             log_progress(" ", fulltestname, end="", flush=True)
             try:
                 sub_load(sub_control, files=filenames)
+
+                if quit:
+                    return
+
                 sub_ground(sub_control, parts=parts, context=context)
                 with sub_solve(sub_control, yield_=True) as models:
                     for model in models:
@@ -105,7 +117,7 @@ def testrunner_plugin(
             finally:
                 log_progress(flush=True)
 
-        for filename, tests in gather_tests(files, logger):
+        for filename, tests in gather_tests(files, error_detector_logger):
             log_progress("Testing", "stdin" if filename.endswith("-stdin.lp") else filename)
             for testname, (dependencies, lineno) in tests.items():
                 parts = [
@@ -114,6 +126,10 @@ def testrunner_plugin(
                 ]
                 fulltestname = f"{testname}({', '.join(dependencies)})"
                 verify_cannots((filename,), fulltestname, parts, lineno)
+
+        if quit:
+            return
+
 
         log_progress("Testing base")
         verify_cannots(
