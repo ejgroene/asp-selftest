@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import coverage
+
 coverage = coverage.Coverage(source_pkgs=["asp_selftest"])
 coverage.erase()
 coverage.start()

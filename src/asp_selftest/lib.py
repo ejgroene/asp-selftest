@@ -1,4 +1,3 @@
-
 # some exports for other that find them interesting to use
 
 from .integration import ground_exc
@@ -15,4 +14,9 @@ from .plugins import (
     compound_context_plugin,
     clingo_reify_plugin,
 )
-from .session2 import session2, clingo_session, clingo_main_session, clingo_session_plugins
+from .session2 import (
+    session2,
+    clingo_session,
+    clingo_main_session,
+    clingo_session_plugins,
+)
