@@ -45,7 +45,7 @@ def clingo_reify_plugin(
 ):
     """Plugin turning rule predicates into reallified rules and adds them to the control."""
 
-    logger, _load, ground, solve = next(
+    _load, ground, solve = next(
         parts=parts, context=context, arguments=arguments, **etc
     )  # test **etc
 
@@ -76,7 +76,7 @@ def clingo_reify_plugin(
         for rule in rules_added:
             control.add(rule)
 
-    return logger, load, ground, solve
+    return load, ground, solve
 
 
 def to_symbol(theory_term):
@@ -359,10 +359,10 @@ def test_reify_plugin(tmp_path, code, rules, trace=lambda _: None, arguments=(),
             trace(("ground", control, etc))
             control.ground(**etc)
 
-        return None, load, ground, None
+        return load, ground, None
 
     new_rules = set()
-    _, load, ground, _ = clingo_reify_plugin(
+    load, ground, _ = clingo_reify_plugin(
         next_plugin, on_rule=new_rules.add, arguments=arguments, **etc
     )
     control = clingo.Control(arguments=arguments)
