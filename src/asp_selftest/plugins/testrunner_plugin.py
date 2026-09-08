@@ -11,6 +11,7 @@ import selftest
 test = selftest.get_tester(__name__)
 
 from .misc import NA, write_file, format_symbols
+from .clingo_control_plugin import ControlEx
 
 
 class ConstraintError(Exception):
@@ -23,7 +24,7 @@ def is_testprogram(a):
             return a.name, [p.name for p in a.parameters]
 
 
-def gather_tests(files, logger):
+def gather_tests(files, controlex):
     all_tests = collections.defaultdict(dict)
 
     def _filter_program(ast):
@@ -35,11 +36,7 @@ def gather_tests(files, logger):
                 raise ConstraintError(f"Duplicate test: {name!r} in {filename}.")
             tests[name] = (dependencies, ast.location.begin.line)
 
-    def _logger(code, message):
-        if code != clingo.MessageCode.FileIncluded:
-            logger(code, message)
-
-    clingo.ast.parse_files(files, callback=_filter_program, logger=_logger)
+    controlex.parse_files(files, callback=_filter_program)
     return reversed(all_tests.items())
 
 
@@ -80,7 +77,7 @@ def testrunner_plugin(
 ):
     """Runs all tests in every file separately, during loading."""
 
-    next_logger, _load, ground, solve = next(
+    _load, ground, solve = next(
         logger=logger, arguments=arguments, context=context, **etc
     )
 
@@ -99,7 +96,7 @@ def testrunner_plugin(
         files = prepare_test_files(files)
 
         def verify_cannots(filenames, fulltestname, parts, lineno):
-            sub_logger, sub_load, sub_ground, sub_solve = next(
+            sub_load, sub_ground, sub_solve = next(
                 logger=error_detector_logger, arguments=new_args, context=context, **etc
             )
             sub_control = clingo.Control(
@@ -120,7 +117,7 @@ def testrunner_plugin(
             finally:
                 log_progress(flush=True)
 
-        for filename, tests in gather_tests(files, error_detector_logger):
+        for filename, tests in gather_tests(files, control):
             log_progress(
                 "Testing", "stdin" if filename.endswith("-stdin.lp") else filename
             )
@@ -142,7 +139,7 @@ def testrunner_plugin(
 
         _load(control, files)
 
-    return next_logger, load if run_tests else _load, ground, solve
+    return load if run_tests else _load, ground, solve
 
 
 def tracing_clingo_plugin(trace=lambda x: None):
@@ -162,7 +159,7 @@ def tracing_clingo_plugin(trace=lambda x: None):
             trace(yield_)
             return control.solve(yield_=yield_)
 
-        return None, load, ground, solve
+        return load, ground, solve
 
     return tracer
 
@@ -177,9 +174,9 @@ def testrunner_plugin_basics(tmp_path, stderr):
     """,
     )
 
-    _0, load, ground, solve = testrunner_plugin(tracing_clingo_plugin())
+    load, ground, solve = testrunner_plugin(tracing_clingo_plugin())
 
-    main_control = clingo.Control()
+    main_control = ControlEx()
     with test.raises(ConstraintError, 'cannot("I fail")') as e:
         load(main_control, files=(testfile,))
     test.eq(
@@ -200,9 +197,9 @@ def testrunner_plugin_no_failures(tmp_path, stderr):
     """,
     )
 
-    _, load, ground, solve = testrunner_plugin(tracing_clingo_plugin())
+    load, ground, solve = testrunner_plugin(tracing_clingo_plugin())
 
-    main_control = clingo.Control()
+    main_control = ControlEx()
     load(main_control, files=(testfile,))
     test.eq(
         stderr.getvalue(), f"Testing {testfile}\n  test_a(base)\nTesting base\n  base\n"
@@ -223,10 +220,11 @@ def run_tests_per_included_file_separately(tmp_path, stdout, stderr):
         f'#include "{part_b}".  #include "{part_a}".  #program test_c.',
     )
 
-    _, load, ground, solve = testrunner_plugin(
+    load, ground, solve = testrunner_plugin(
         tracing_clingo_plugin(), arguments=["--warn", "no-file-included"]
     )
-    main_control = clingo.Control(arguments=["--warn", "no-file-included"])
+    main_control = ControlEx()
+    # main_control = clingo.Control(arguments=["--warn", "no-file-included"])
     load(main_control, files=(part_c,))
     test.eq("", stdout.getvalue())
     out = stderr.getvalue()
@@ -250,8 +248,8 @@ Testing base
 def parse_and_run_tests(asp_code, trace=lambda _: None, **etc):
     with test.tmp_path as p:
         inputfile = write_file(p / "inputfile.lp", asp_code)
-        _, load, _, _ = testrunner_plugin(tracing_clingo_plugin(trace=trace), **etc)
-        main_control = clingo.Control()
+        load, _, _ = testrunner_plugin(tracing_clingo_plugin(trace=trace), **etc)
+        main_control = ControlEx()
         load(main_control, files=(inputfile,))
 
 
@@ -266,9 +264,9 @@ def cannot_in_base(stderr):
 def cannot_in_base_in_multiple_files(stdout, tmp_path):
     a = write_file(tmp_path / "a.lp", '#external b. cannot("need b") :- not b.')
     b = write_file(tmp_path / "b.lp", "b.")
-    _, load, ground, _ = testrunner_plugin(tracing_clingo_plugin())
+    load, ground, _ = testrunner_plugin(tracing_clingo_plugin())
 
-    ctl = clingo.Control()
+    ctl = ControlEx()
     try:
         load(ctl, files=(a,))
     except ConstraintError as e:
@@ -276,7 +274,7 @@ def cannot_in_base_in_multiple_files(stdout, tmp_path):
     else:
         self.fail()
 
-    ctl = clingo.Control()
+    ctl = ControlEx()
     load(ctl, files=(a, b))
     ground(ctl, (("base", ()),))
     test.eq(["b"], [sa.symbol.name for sa in ctl.symbolic_atoms])

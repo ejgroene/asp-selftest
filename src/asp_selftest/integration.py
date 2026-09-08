@@ -6,8 +6,8 @@ import os
 import clingo
 
 from .plugins.misc import write_file, list_symbols
-
 from .session2 import session2, clingo_session
+from .plugins.clingo_control_plugin import ControlEx
 
 from .plugins import (
     source_plugin,
@@ -42,11 +42,8 @@ def ground_exc(
     old_path = os.environ.get("CLINGOPATH", "").split(":")
     os.environ["CLINGOPATH"] = ":".join((*old_path, *include_paths))
     try:
-        control = clingo.Control(arguments=arguments)
-        if observer:
-            control.register_observer(observer)
-        session(
-            control=control,
+        result, control = session(
+            observer=observer,
             source=source,
             label=label,
             files=files,
@@ -54,7 +51,7 @@ def ground_exc(
             yield_=True,
             **etc,
         )  # not consuming the result so no solving takes place
-        return control
+        return result, control
     finally:
         os.environ.pop("CLINGOPATH")
         if old_path:
@@ -63,8 +60,8 @@ def ground_exc(
 
 @test
 def ground_simple(stderr):
-    control = ground_exc(source="a. b.")
-    test.isinstance(control, clingo.Control)
+    result, control = ground_exc(source="a. b.")
+    test.isinstance(control, ControlEx)
     test.eq(["a", "b"], list_symbols(control))
     test.endswith(stderr.getvalue(), "-string.lp\nTesting base\n  base\n")
 
@@ -73,7 +70,7 @@ def ground_simple(stderr):
 def ground_files(tmp_path, stderr):
     f1 = write_file(tmp_path / "f1", "f(1).")
     f2 = write_file(tmp_path / "f2", "f(2).")
-    control = ground_exc(files=(f1, f2))
+    result, control = ground_exc(files=(f1, f2))
     test.eq(["f(1)", "f(2)"], list_symbols(control))
     out = stderr.getvalue()
     test.contains(out, "/f1\nTesting ")
@@ -88,7 +85,7 @@ def ground_with_observer(stderr):
         def output_atom(self, symbol, atom):
             atoms[atom] = symbol
 
-    ground_exc(source="a.", observer=MyObserver())
+    _, control = ground_exc(source="a.", observer=MyObserver())
     test.eq({0: clingo.Function("a", [], True)}, atoms)
     test.endswith(stderr.getvalue(), "-string.lp\nTesting base\n  base\n")
 

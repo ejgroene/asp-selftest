@@ -102,7 +102,7 @@ def test_session2_sequencing():
 
 
 common_plugins = (
-    clingo_syntaxerror_plugin,
+    # clingo_syntaxerror_plugin,
     clingo_sequencer_plugin,
     testrunner_plugin,
     clingo_reify_plugin,
@@ -164,7 +164,7 @@ def session_with_source(stderr):
 
 @test
 def test_session2_not_wat(stderr):
-    solve_handle = clingo_session(source="a. b. c(a).", yield_=True)
+    solve_handle, control = clingo_session(source="a. b. c(a).", yield_=True)
     with solve_handle as result:
         for model in result:
             test.eq("a b c(a)", str(model))
@@ -175,6 +175,6 @@ def test_session2_not_wat(stderr):
 def session_with_file(tmp_path, stderr):
     file1 = tmp_path / "test.lp"
     file1.write_text("test(1).")
-    solveresult = clingo_session(files=(file1.as_posix(),))
+    solveresult, control = clingo_session(files=(file1.as_posix(),))
     test.truth(solveresult.satisfiable)
     test.endswith(stderr.getvalue(), "test.lp\nTesting base\n  base\n")
