@@ -1,6 +1,6 @@
 import functools
 import sys
-import clingo
+import clingo.ast
 from .messageparser import warn2raise
 
 
@@ -12,7 +12,9 @@ test = selftest.get_tester(__name__)
 class ControlEx:
     """Wraps clingo.Control turning logged errors into exceptions."""
 
-    def __init__(self, arguments=(), logger=None, message_limit=20):
+    def __init__(
+        self, arguments=(), logger=None, message_limit=20, control=None, observer=None
+    ):
         self.arguments = arguments or [
             "--warn",
             "atom-undefined",
@@ -27,11 +29,18 @@ class ControlEx:
         ]
         self.user_logger = logger
         self.message_limit = message_limit
-        self.ctrl = clingo.Control(
-            arguments=self.arguments,
-            logger=self.logger,
-            message_limit=self.message_limit,
-        )
+        self.observer = observer
+        if control:
+            self.control = control
+        else:
+            self.control = clingo.Control(
+                arguments=self.arguments,
+                logger=self.logger,
+                message_limit=self.message_limit,
+            )
+        if observer:
+            self.control.register_observer(observer)  # TODO test in new
+        self.parse_files = self._getattr(self, "_parse_files")
 
     def new(self):
         """creates a new instance with the same arguments as this one was created"""
@@ -42,12 +51,13 @@ class ControlEx:
         )
 
     def logger(self, code, message):
-        self.error = code, message
+        if code != clingo.MessageCode.FileIncluded:
+            self.error = code, message
         if self.user_logger:
             self.user_logger(code, message)
 
-    def __getattr__(self, name):
-        attr = getattr(self.ctrl, name)
+    def _getattr(self, obj, name):
+        attr = getattr(obj, name)
         if callable(attr):
 
             @functools.wraps(attr)
@@ -56,7 +66,7 @@ class ControlEx:
                     self.error = None
                     ret = attr(*args, **kwargs)
                 except RuntimeError as e:
-                    assert str(e) in ["parsing failed"], e
+                    assert str(e) in ["parsing failed", "syntax error"], e
                 if self.error:
                     raise warn2raise(None, None, *self.error)
                 else:
@@ -65,31 +75,45 @@ class ControlEx:
             return with_ex
         return attr
 
+    def __getattr__(self, name):
+        return self._getattr(self.control, name)
 
-def clingo_control_plugin(next, control=None, arguments=[], message_limit=20, **etc):
-    """Provides a default control when there is none."""
-
-    def logger(code, message):
-        _logger(code, message)
-
-    if not control:
-        control = clingo.Control(
-            logger=logger, arguments=arguments, message_limit=message_limit
+    def _parse_files(self, files, callback):
+        clingo.ast.parse_files(
+            [str(f) for f in files],
+            callback=callback,
+            logger=self.logger,
+            message_limit=self.message_limit,
         )
 
-    # logger: this is the one passed to Control. That is a fait-accompli!
-    #         Use it to build a compatible Control for yourself, if needed.
-    #         Please pass it on! Wrap it, if you want, but pass it on.
-    # This logger will call the one you return, if not None. Always, since I have no business
-    # with it, and it is the *only* way for other plugins to manipulate it.
-    # Please return it from your next plugin, wrapped it you want.
-    _logger, main = next(
-        logger=logger,
+
+def clingo_control_plugin(
+    next,
+    control=None,
+    logger=None,
+    arguments=[],
+    message_limit=20,
+    observer=None,
+    **etc,
+):
+    """Provides an (exception raising) default control when there is none."""
+
+    assert not control, control
+
+    if not control:
+        control = ControlEx(
+            arguments=arguments,
+            logger=logger,
+            message_limit=message_limit,
+            observer=observer,
+        )
+
+    main = next(
         control=control,
-        arguments=arguments,
-        message_limit=message_limit,
         **etc,
     )
+
+    assert callable(main), main
 
     return main
 
@@ -162,6 +186,48 @@ def pass_and_store_and_new():
 
 
 @test
+def control_already_provided():
+    msg = []
+
+    def mylogger(*args):
+        msg.extend(args)
+
+    myarguments = ["--const", "a=42"]
+    ctrl = clingo.Control(arguments=myarguments, logger=mylogger)
+    c = ControlEx(control=ctrl, arguments=myarguments, logger=mylogger)
+    # There is no way to verify if the control has indeed bee created using
+    # the given arguments and logger. We must trust the caller.
+    test.eq(ctrl, c.control)
+    test.eq(myarguments, c.arguments)
+    c.logger("hi", "john")
+    test.eq(["hi", "john"], msg)
+
+
+@test
+def parse_files_piggybacks_on_ControlEx(tmp_path):
+    f = tmp_path / "f.lp"
+    f.write_text("a :- b.")
+    c = ControlEx()
+
+    nodes = []
+
+    def callback(node):
+        nodes.append(node)
+
+    c.parse_files((f,), callback=callback)
+    test.eq(["#program base.", "a :- b."], [str(n) for n in nodes])
+
+
+@test
+def parse_files_gives_same_errors(tmp_path):
+    f = tmp_path / "f.lp"
+    f.write_text("a")
+    c = ControlEx()
+    with test.raises(SyntaxError, "syntax error, unexpected EOF"):
+        c.parse_files((f,), callback=lambda _: None)
+
+
+@test
 def control_plugin_basics():
     trace = []
 
@@ -169,83 +235,60 @@ def control_plugin_basics():
         test.eq("better", more)
         trace.append(control)
 
-        def logger(code, message):
-            trace.append(message)
-
         def main():
             return 43
 
-        return logger, main
+        return main
 
     main = clingo_control_plugin(next, more="better")
     control = trace[0]
-    test.isinstance(control, clingo.Control)
+    test.isinstance(control, ControlEx)
     test.eq(1, len(trace))
     try:
         control.add("error")
-    except RuntimeError:
-        pass
-    test.eq("<block>:2:1-2: error: syntax error, unexpected EOF\n", trace[1])
+    except SyntaxError as e:
+        test.eq("syntax error, unexpected EOF (<asp code>, line 2)", str(e))
     r = main()
     test.eq(43, r)
 
 
 @test
-def control_plugin_makes_no_control_when_given():
-    trace = []
-
-    def next(control=None, **etc):
-        trace.append(control)
-        return 1, 2
-
-    main = clingo_control_plugin(next, control="ceçi c'est un Control")
-    test.eq("ceçi c'est un Control", trace[0])
-    test.eq(2, main)
-    test.eq(1, len(trace))
-
-
-@test
-def pass_arguments_to_control():
+def pass_arguments_to_control1():
     trace = []
 
     def next_plugin(control=None, arguments=(), **etc):
         trace.append(control)
         trace.append(arguments)
 
-        def logger(code, message):
-            trace.append(message)
-
-        return logger, lambda: None
+        return lambda: 42
 
     clingo_control_plugin(next_plugin, arguments=["--const", "a=42"])
-    test.eq([test.any, ["--const", "a=42"]], trace)
     control = trace[0]
+    test.eq(["--const", "a=42"], control.arguments)
     control.add("b(a * 2).")
     control.ground()
-    test.eq([test.any, ["--const", "a=42"]], trace)
     b = next(control.symbolic_atoms.by_signature("b", 1))
     test.eq("b(84)", str(b.symbol))
 
 
 @test
-def pass_arguments_to_control():
+def pass_arguments_to_control2():
     trace = []
     logs = []
 
-    def next_plugin(control=None, message_limit=20, **etc):
+    def next_plugin(control=None, **etc):
         trace.append(control)
-        trace.append(message_limit)
+        return lambda: None
 
-        def logger(code, message):
-            logs.append(message)
+    def user_logger(code, message):
+        logs.append(message)
 
-        return logger, lambda: None
-
-    clingo_control_plugin(next_plugin, message_limit=2)
-    test.eq([test.any, 2], trace)
+    clingo_control_plugin(next_plugin, logger=user_logger, message_limit=2)
     control = trace[0]
+    test.eq(2, control.message_limit)
     control.add("p :- a.  q :- b.  r :- c.")  # cause 3 messages
-    control.ground()
+    with test.raises(SyntaxError, "atom does not occur in any rule head:  b") as e:
+        control.ground()
     test.eq(
         [  # only 2 get logged
             "<block>:1:6-7: info: atom does not occur in any rule head:\n  a\n",
@@ -253,3 +296,15 @@ def pass_arguments_to_control():
         ],
         logs,
     )
+
+
+@test
+def pass_yield_and_observer():
+    def next(control, yield_=None):
+        return lambda: f"yield:{yield_}"
+
+    class Observer:
+        pass
+
+    main = clingo_control_plugin(next, observer=Observer(), yield_=True)
+    test.eq("yield:True", main())
