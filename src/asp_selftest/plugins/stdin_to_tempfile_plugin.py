@@ -20,13 +20,13 @@ def stdin_to_tempfile_plugin(next, files=(), **etc):
         stdinput_file = write_tempfile("-stdin.lp", stdinput)
         files = [stdinput_file.name]
 
-    logger, _main = next(files=files, **etc)
+    _main = next(files=files, **etc)
 
     def main():
         stdinput_file  # keep save from GC
         return _main()
 
-    return logger, main
+    return main
 
 
 def run_test():
@@ -36,10 +36,9 @@ def run_test():
             data = open(files[0]).read()
             return files, data
 
-        return 42, main
+        return main
 
-    logger, main = stdin_to_tempfile_plugin(next_plugin, files=())
-    test.eq(42, logger)
+    main = stdin_to_tempfile_plugin(next_plugin, files=())
     files, data = main()
     for f in files:
         print(f)

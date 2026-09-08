@@ -17,14 +17,14 @@ def clingo_sequencer_plugin(
 ):
     """Breaks down main into Clingo-specific steps."""
 
-    logger, load, ground, solve = next(parts=parts, **etc)
+    load, ground, solve = next(parts=parts, **etc)
 
     def main():
         load(control, files=files)
         ground(control, parts=parts, context=context)
-        return solve(control, on_model=on_model, yield_=yield_)
+        return solve(control, on_model=on_model, yield_=yield_), control
 
-    return logger, main
+    return main
 
 
 @test
@@ -33,7 +33,7 @@ def sequencer_plugin_basics(tmp_path):
     logs = []
     trace = []
 
-    def next_plugin(logger=None, **etc):
+    def next_plugin(**etc):
         trace.append(etc)
 
         def load(control, files=()):
@@ -48,7 +48,7 @@ def sequencer_plugin_basics(tmp_path):
             trace.append(on_model)
             trace.append(yield_)
 
-        return logger, load, ground, solve
+        return load, ground, solve
 
     def my_logger(code, message):
         logs.append((code, message))
@@ -61,9 +61,8 @@ def sequencer_plugin_basics(tmp_path):
         pass
 
     file1 = write_file(tmp_path / "file1.lp", "a(@my_func(b)).")
-    logger, main = clingo_sequencer_plugin(
+    main = clingo_sequencer_plugin(
         next_plugin,
-        logger=my_logger,
         files=(file1,),
         parts=(("part_a", ()), ("part_b", ())),
         context=MyContext(),
@@ -71,9 +70,6 @@ def sequencer_plugin_basics(tmp_path):
         yield_=True,
         more="better",
     )
-
-    logger(42, "message 42")
-    test.eq([(42, "message 42")], logs)
 
     main()
 
@@ -90,7 +86,7 @@ def test_defaults():
 
     trace = []
 
-    def next_plugin(logger=None, **etc):
+    def next_plugin(**etc):
         trace.append(etc)
 
         def load(control, files="-"):
@@ -104,10 +100,10 @@ def test_defaults():
             trace.append(on_model)
             trace.append(yield_)
 
-        return logger, load, ground, solve
+        return load, ground, solve
 
     # file1 = write_file(tmp_path/'file1.lp', "a(@my_func(b)).")
-    logger, main = clingo_sequencer_plugin(next_plugin)
+    main = clingo_sequencer_plugin(next_plugin)
 
     main()
 
