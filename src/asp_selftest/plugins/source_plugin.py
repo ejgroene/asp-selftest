@@ -1,11 +1,10 @@
 import tempfile
 import pathlib
-
 import selftest
 
-test = selftest.get_tester(__name__)
-
 from .misc import write_tempfile
+
+test = selftest.get_tester(__name__)
 
 
 def source_plugin(next, source=None, label=None, files=(), **etc):
