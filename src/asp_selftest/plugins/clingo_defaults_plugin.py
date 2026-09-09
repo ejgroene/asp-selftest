@@ -1,16 +1,12 @@
 import sys
+import os
 import clingo
-
-
+import selftest
 from clingo.script import enable_python
-
-enable_python()
-
 
 from .misc import write_file
 
-import selftest
-
+enable_python()
 test = selftest.get_tester(__name__)
 
 
@@ -59,15 +55,25 @@ def keep_control_from_GC():
     test.eq(control, result.__control)
 
 
-# @test
-def no_files():
-    import os
-
-    logger, load, ground, solve = clingo_defaults_plugin(None)
+@test
+def no_files_read_from_stdin(tmp_path):
+    load, ground, solve = clingo_defaults_plugin(None)
     control = clingo.Control()
-    os.write(0, b"aap")
-    load(control, files=())
-    ground(control)
-    with solve(control, yield_=True) as s:
-        for m in s:
-            print(m)
+    results = []
+    # Clingo used libc to read from stdin. It takes some fiddling to
+    # put something stdin for libc.
+    org_stdin = os.dup(0)
+    tmp_stdin = tmp_path / "tmp_stdin"
+    tmp_stdin.write_text("a. b.")
+    with tmp_stdin.open() as stdin:
+        try:
+            os.dup2(stdin.fileno(), 0)  # dup our file to stdin (0)
+            load(control, files=())
+            ground(control)
+            with solve(control, yield_=True) as s:
+                for m in s:
+                    results.extend(map(str, m.symbols(atoms=True)))
+        finally:
+            os.dup2(org_stdin, 0)
+            stdin.close()
+    test.eq(["a", "b"], results)
