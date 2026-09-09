@@ -19,7 +19,6 @@ from .plugins import (
     clingo_main_plugin,
     source_plugin,
     clingo_control_plugin,
-    clingo_syntaxerror_plugin,
     clingo_sequencer_plugin,
     clingo_defaults_plugin,
     testrunner_plugin,

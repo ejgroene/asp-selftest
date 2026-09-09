@@ -7,7 +7,8 @@ import clingo
 
 from .plugins.misc import write_file, list_symbols
 from .session2 import session2, clingo_session
-from .plugins.clingo_control_plugin import ControlEx
+from .controlex import ControlEx
+
 
 from .plugins import (
     source_plugin,
@@ -15,7 +16,6 @@ from .plugins import (
     clingo_sequencer_plugin,
     insert_plugin_plugin,
     clingo_defaults_plugin,
-    clingo_syntaxerror_plugin,
     testrunner_plugin,
     stdin_to_tempfile_plugin,
     compound_context_plugin,
@@ -102,8 +102,9 @@ def pass_arguments_to_control(stderr, stdout):
   File "*-string.lp", line 1
     1 a :- b.
            ^ atom does not occur in any rule head:  b
-asp_selftest.plugins.messageparser.AspSyntaxError: atom does not occur in any rule head:  b
+asp_selftest.messageparser.AspSyntaxError: atom does not occur in any rule head:  b
 """,
+        diff=test.fndiff,
     )
 
     result, control = ground_exc(
