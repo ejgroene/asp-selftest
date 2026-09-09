@@ -90,7 +90,7 @@ def simple_syntax_error_with_clingo_main():
     should = b"""-stdin.lp", line 2
     1 plugin(".:errorplugin"). a
       ^ syntax error, unexpected EOF
-asp_selftest.plugins.messageparser.AspSyntaxError: syntax error, unexpected EOF
+asp_selftest.messageparser.AspSyntaxError: syntax error, unexpected EOF
 """
     test.endswith(traceback, should, diff=test.diff)
     test.comp.contains(p.stderr, b"*** ERROR")

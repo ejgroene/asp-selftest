@@ -8,7 +8,6 @@ from .plugins import (
     clingo_sequencer_plugin,
     insert_plugin_plugin,
     clingo_defaults_plugin,
-    clingo_syntaxerror_plugin,
     testrunner_plugin,
     stdin_to_tempfile_plugin,
     compound_context_plugin,
