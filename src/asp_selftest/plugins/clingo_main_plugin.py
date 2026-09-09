@@ -1,11 +1,10 @@
 import clingo
+import selftest
+
 from .misc import write_file, ExitCode
 from .clingo_control_plugin import ControlEx
 
-import selftest
-
 test = selftest.get_tester(__name__)
-
 
 VERSION = ".".join(map(str, clingo.version()))
 
@@ -26,15 +25,12 @@ def clingo_main_plugin(next, arguments=(), **etc):
             """As required by clingo_main. It must not raise."""
             # we remove all files from the arguments, as Clingo also has done
             options = [a for a in arguments if a not in files]
-            # we also remove an optional number of models
-            if options:
-                try:
-                    int(options[0])
-                except ValueError:
-                    pass
-                else:
-                    del options[0]
+            # we also remove an optional number of models given as first option
+            if options and options[0].isdecimal():
+                del options[0]
             try:
+                # The ControlEx should represent the control with the arguments it is
+                # created by Clingo as accurate as possible to allow recreating it.
                 self.controlex = ControlEx(
                     control=control,
                     arguments=options,
