@@ -1,21 +1,16 @@
 import sys
 import os
-import tempfile
 import timeit
 import collections
 import itertools
 import clingo.ast
-
 import selftest
 
 test = selftest.get_tester(__name__)
 
 from .misc import NA, write_file, format_symbols
-from .clingo_control_plugin import ControlEx
-
-
-class ConstraintError(Exception):
-    pass
+from ..controlex import ControlEx
+from ..exceptions import ConstraintError
 
 
 def is_testprogram(a):
@@ -36,19 +31,9 @@ def gather_tests(files, controlex):
                 raise ConstraintError(f"Duplicate test: {name!r} in {filename}.")
             tests[name] = (dependencies, ast.location.begin.line)
 
+    # do not use clingo.ast.parse_files directly to support exceptions i.s.o. logging
     controlex.parse_files(files, callback=_filter_program)
     return reversed(all_tests.items())
-
-
-def prepare_test_files(files):
-    """Prepare test files, reading from stdin if no files are provided."""
-    if not files:
-        with open(os.dup(0)) as f:  # read from stdin without removing the data
-            asp_code = f.read()
-        with tempfile.NamedTemporaryFile("w", suffix="-stdin.lp") as stdin_data:
-            print(asp_code, file=stdin_data, flush=True)
-            return [stdin_data.name]
-    return files
 
 
 def check_model(model, errornote):
@@ -72,25 +57,20 @@ def log_progress(*args, **kwargs):
     print(*args, **kwargs, file=sys.stderr)
 
 
-def testrunner_plugin(
-    next, run_tests=True, logger=None, arguments=(), context=None, **etc
-):
+def testrunner_plugin(next, run_tests=True, **etc):
     """Runs all tests in every file separately, during loading."""
 
-    _load, ground, solve = next(
-        logger=logger, arguments=arguments, context=context, **etc
-    )
+    _load, ground, solve = next(**etc)
 
     def load(control, files):
-        files = prepare_test_files(files)
 
         def verify_cannots(filenames, fulltestname, parts, lineno):
-            sub_load, sub_ground, sub_solve = next(context=context, **etc)
-            sub_control = control.new(arguments=[*control.arguments, *arguments])
+            sub_load, sub_ground, sub_solve = next(**etc)
+            sub_control = control.new()
             log_progress(" ", fulltestname, end="", flush=True)
             try:
                 sub_load(sub_control, files=filenames)
-                sub_ground(sub_control, parts=parts, context=context)
+                sub_ground(sub_control, parts=parts, context=etc.get("context"))
                 with sub_solve(sub_control, yield_=True) as models:
                     for model in models:
                         errornote = f"File {','.join(filenames)}, line {lineno}, in {fulltestname}"
@@ -256,19 +236,6 @@ def cannot_in_base_in_multiple_files(stdout, tmp_path):
     load(ctl, files=(a, b))
     ground(ctl, (("base", ()),))
     test.eq(["b"], [sa.symbol.name for sa in ctl.symbolic_atoms])
-
-
-@test
-def use_arguments_for_testing(stderr):
-    trace = []
-    asp_program = "sum(a). cannot(a) :- not sum(42)."
-    parse_and_run_tests(asp_program, arguments=["--const", "a=42"], trace=trace.append)
-    test.eq(
-        {"logger": None, "arguments": ["--const", "a=42"], "context": None}, trace[0]
-    )
-    with test.raises(ConstraintError, "cannot(99)"):
-        parse_and_run_tests(asp_program, arguments=["--const", "a=99"])
-    test.endswith(stderr.getvalue(), "/inputfile.lp\nTesting base\n  base\n")
 
 
 @test
