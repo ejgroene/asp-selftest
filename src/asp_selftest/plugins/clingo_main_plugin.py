@@ -2,7 +2,7 @@ import clingo
 import selftest
 
 from .misc import write_file, ExitCode
-from .clingo_control_plugin import ControlEx
+from ..controlex import ControlEx
 
 test = selftest.get_tester(__name__)
 
