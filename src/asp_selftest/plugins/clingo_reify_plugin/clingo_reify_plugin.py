@@ -4,7 +4,7 @@ import pathlib
 
 from .asputil import is_tuple, is_function, mk_symbol, mk_theory_atom
 from ..misc import write_file, create_control, list_symbols
-from ..clingo_control_plugin import ControlEx
+from ...controlex import ControlEx
 
 import selftest
 
@@ -56,9 +56,6 @@ def clingo_reify_plugin(
             sub_control = control.new(
                 arguments=control.arguments + ["--warn", "no-atom-undefined"]
             )
-            # sub_control = create_control(
-            #    arguments=[*arguments, "--warn", "no-atom-undefined"], **etc
-            # )
             _load(sub_control, files)
 
             for rule in rules_added:
@@ -498,7 +495,7 @@ def reify_with_context_in_plugin(tmp_path):
 
 
 @test
-def use_proper_logger(tmp_path):
+def raise_exceptions_iso_logging(tmp_path):
     try:
         test_reify_plugin(tmp_path, "a", {})
     except SyntaxError as e:
