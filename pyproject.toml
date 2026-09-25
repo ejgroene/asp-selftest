@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies=[
-    'clingo >= 5.8.0',
+    'clingo >= 5.8.2',
     'selftest >= 0.4.6',
     'coverage',
 ]

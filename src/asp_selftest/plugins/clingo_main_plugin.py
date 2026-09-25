@@ -63,7 +63,7 @@ def clingo_thingies(stdout):
     clingo_main_plugin(next_plugin, arguments=["--help"])()
     out = stdout.getvalue()
     test.startswith(
-        out, "clingo+ version 5.8.0\nusage: clingo+ [number] [options] [files]\n\n"
+        out[:80], "clingo+ version 5.8.2\nusage: clingo+ [number] [options] [files]\n\n"
     )
 
 
