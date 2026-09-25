@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies=[
     'clingo >= 5.8.2',
-    'selftest >= 0.4.6',
+    'selftest >= 0.5.2',
     'coverage',
 ]
 
