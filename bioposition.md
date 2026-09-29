@@ -28,3 +28,4 @@ Wishes:
    3. is_a_thing(A) is only there to ground A, not as a condition.
 4. index operator on tuples
 5. #const etc scoped to #program
+6. plash or unpack operation, like Python *iter.
