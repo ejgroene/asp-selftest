@@ -1,9 +1,10 @@
 # Bio/positionpaper
 
-In 2024 I sold my company and started on an assignment for the Dutch railway authority ProRail. Their question was: can you automate the design of the logic rules for the rail side signalling (interlocking) systems.
+In 2024, after 22 years, I sold my company and began an assignment for ProRail, the Dutch railway infrastructure manager. The central question was whether the logic rules governing railway interlocking systems could be designed automatically.
 
-Have no experience with railway interlocking, nor with ASP, I took the assignment. In this paper I describe what I did with ASP and what I would like to see and contribute in the future.
+Although I had no prior experience with railway interlocking or ASP, I took on the assignment. It offered an opportunity to investigate a challenging problem in an unfamiliar domain and to explore approaches that might extend what is currently considered feasible.
 
+This paper describes how I applied ASP to the problem, how the resulting work is used today, and the directions I hope to pursue and contribute to in the future.
 
 Wishes:
 
