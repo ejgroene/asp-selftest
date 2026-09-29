@@ -13,27 +13,26 @@ from ..controlex import ControlEx
 from ..exceptions import ConstraintError
 
 
-def is_testprogram(a):
-    if a.ast_type == clingo.ast.ASTType.Program:
-        if a.name.startswith("test_"):
-            return a.name, [p.name for p in a.parameters]
+def is_program(a):
+    if a.ast_type == clingo.ast.ASTType.Program and a.name != "base":
+        return a.name, [p.name for p in a.parameters]
 
 
-def gather_tests(files, controlex):
-    all_tests = collections.defaultdict(dict)
+def gather_programs(files, controlex):
+    all_programs = collections.defaultdict(dict)
 
     def _filter_program(ast):
         filename = ast.location.begin.filename
-        tests = all_tests[filename]
-        if program := is_testprogram(ast):
+        programs = all_programs[filename]
+        if program := is_program(ast):
             name, dependencies = program
-            if name in tests:
-                raise ConstraintError(f"Duplicate test: {name!r} in {filename}.")
-            tests[name] = (dependencies, ast.location.begin.line)
+            if name in programs:
+                raise ConstraintError(f"Duplicate program: {name!r} in {filename}.")
+            programs[name] = (dependencies, ast.location.begin.line)
 
     # do not use clingo.ast.parse_files directly to support exceptions i.s.o. logging
     controlex.parse_files(files, callback=_filter_program)
-    return reversed(all_tests.items())
+    return reversed(all_programs.items())
 
 
 def check_model(model, errornote):
@@ -78,17 +77,21 @@ def testrunner_plugin(next, run_tests=True, **etc):
             finally:
                 log_progress(flush=True)
 
-        for filename, tests in gather_tests(files, control):
+        for filename, programs in gather_programs(files, control):
             log_progress(
                 "Testing", "stdin" if filename.endswith("-stdin.lp") else filename
             )
-            for testname, (dependencies, lineno) in tests.items():
-                parts = [
-                    (testname, [NA for _ in dependencies]),
-                    *((d, []) for d in dependencies),
-                ]
-                fulltestname = f"{testname}({', '.join(dependencies)})"
-                verify_cannots((filename,), fulltestname, parts, lineno)
+            for program_name, (dependencies, lineno) in programs.items():
+                if program_name.startswith("test_"):
+                    parts = [
+                        (program_name, [NA for _ in dependencies]),
+                        *(
+                            (d, [NA for _ in programs.get(d, ((),))[0]])
+                            for d in dependencies
+                        ),
+                    ]
+                    fulltestname = f"{program_name}({', '.join(dependencies)})"
+                    verify_cannots((filename,), fulltestname, parts, lineno)
 
         log_progress("Testing base")
         verify_cannots(
@@ -267,7 +270,7 @@ def use_context_when_running_tests(stderr):
 def check_for_duplicate_test():
     with test.raises(Exception) as e:
         parse_and_run_tests(""" #program test_a. \n #program test_a. """)
-    test.startswith(str(e.exception), "Duplicate test: 'test_a' in ")
+    test.startswith(str(e.exception), "Duplicate program: 'test_a' in ")
 
 
 @test
@@ -362,6 +365,31 @@ def dependencies(stderr, stdout):
     test.endswith(
         stderr.getvalue(),
         "/inputfile.lp\n  test_base(base)\n  test_one(base, one)\nTesting base\n  base\n",
+    )
+
+
+@test
+def nested_dependencies(stderr, stdout):
+    parse_and_run_tests(
+        """
+        base_fact.
+
+        #program one(base).
+        one_fact :- base_fact.              % <= must not raise atom does not occur
+
+        #program two(base, one).
+        two_fact :- base_fact, one_fact.    % <= must not raise atom does not occur
+
+        #program test_one(base, one, two).
+        cannot(base_fact) :- not base_fact. % <= must not raise atom does not occur
+        cannot(one_fact) :- not one_fact.   % <= must not raise atom does not occur
+        cannot(two_fact) :- not two_fact.   % <= must not raise atom does not occur
+    """
+    )
+    test.eq("", stdout.getvalue())
+    test.endswith(
+        stderr.getvalue(),
+        "/inputfile.lp\n  test_one(base, one, two)\nTesting base\n  base\n",
     )
 
 
