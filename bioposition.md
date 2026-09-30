@@ -20,6 +20,8 @@ The most prominent design influence was the choice to create an (almost) ASP-onl
 
 ## Use of ASP
 
+- Vital Logic
+- concept mapping
 - cross compiler
 - unit tests
 - integration tests
