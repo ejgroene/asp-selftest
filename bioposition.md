@@ -39,3 +39,4 @@ Wishes:
 4. index operator on tuples
 5. #const etc scoped to #program
 6. plash or unpack operation, like Python *iter.
+7. dot operator (for namespaces and objects)
