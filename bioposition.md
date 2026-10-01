@@ -38,5 +38,7 @@ Wishes:
    3. is_a_thing(A) is only there to ground A, not as a condition.
 4. index operator on tuples
 5. #const etc scoped to #program
-6. plash or unpack operation, like Python *iter.
-7. dot operator (for namespaces and objects)
+6. #include in ast
+7. previous two points: in large programs, one part may include a file that is also include elsewhere. For decomposing large programs, it is a necessity that each part includes its own stuff, for reasons such as that is separately testable for example. Duplicate includes can be ignored, and that works, but the included file defines a #const, that will cause an error the second time it is included. This can not be avoided. 
+8. plash or unpack operation, like Python *iter.
+9. dot operator (for namespaces and objects)
