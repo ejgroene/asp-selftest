@@ -70,7 +70,13 @@ class ControlEx:
                     self.error = None
                     ret = attr(*args, **kwargs)
                 except RuntimeError as e:
-                    assert str(e) in [
+                    # TODO test
+                    is_ok = str(e).endswith(
+                        "_handle_error\n    raise RuntimeError(msg)\nRuntimeError: unexpected\n"
+                    )
+                    assert is_ok or str(e) in [
+                        "unexpected",
+                        "too many messages.",
                         "parsing failed",
                         "syntax error",
                         "grounding stopped because of errors",
